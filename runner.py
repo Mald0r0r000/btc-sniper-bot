@@ -11,6 +11,7 @@ from typing import Dict, Any
 # Import du bot principal
 from main_v2 import run_analysis_v2
 from notifier import TelegramNotifier
+from data_store import GistDataStore
 
 
 def run_scheduled_analysis() -> Dict[str, Any]:
@@ -23,14 +24,22 @@ def run_scheduled_analysis() -> Dict[str, Any]:
     print(f"⏰ {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}")
     print("=" * 60)
     
-    # Initialiser le notifier
+    # Initialiser le notifier et le data store
     notifier = TelegramNotifier()
+    data_store = GistDataStore()
     telegram_enabled = notifier.is_configured()
     
     if telegram_enabled:
         print("✅ Telegram configuré")
     else:
         print("⚠️ Telegram non configuré (pas d'alertes)")
+    
+    if data_store.github_token and data_store.gist_id:
+        print("✅ Stockage Gist configuré")
+    elif data_store.github_token:
+        print("📝 Gist sera créé à la première sauvegarde")
+    else:
+        print("⚠️ Stockage désactivé (GITHUB_TOKEN manquant)")
     
     try:
         # Exécuter l'analyse (mode full pour max de données)
@@ -40,7 +49,7 @@ def run_scheduled_analysis() -> Dict[str, Any]:
             print("❌ Analyse échouée")
             return None
         
-        # Sauvegarder le rapport
+        # Sauvegarder le rapport localement
         with open('analysis_report.json', 'w', encoding='utf-8') as f:
             json.dump(report, f, indent=2, default=str, ensure_ascii=False)
         
@@ -52,6 +61,21 @@ def run_scheduled_analysis() -> Dict[str, Any]:
         print(f"\n📊 Signal: {signal.get('type', 'UNKNOWN')}")
         print(f"📈 Direction: {direction}")
         print(f"📊 Confiance: {confidence:.0f}/100")
+        
+        # Sauvegarder le signal dans le Gist
+        signal_record = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "price": report.get("price", 0),
+            "signal": {
+                "type": signal.get("type"),
+                "direction": direction,
+                "confidence": confidence,
+                "strength": signal.get("strength")
+            },
+            "dimension_scores": signal.get("dimension_scores", {}),
+            "targets": signal.get("targets", {})
+        }
+        data_store.save_signal(signal_record)
         
         # Notifier si signal fort (confiance >= 60%)
         if telegram_enabled and confidence >= 60:
