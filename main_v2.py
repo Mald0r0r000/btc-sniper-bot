@@ -22,7 +22,8 @@ from analyzers import (
     OnChainAnalyzer,
     SentimentAnalyzer,
     MacroAnalyzer,
-    OptionsAnalyzer
+    OptionsAnalyzer,
+    OpenInterestAnalyzer
 )
 from decision_engine_v2 import DecisionEngineV2
 
@@ -219,6 +220,29 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
             print(f"   🎰 Options: Max Pain ${mp.get('max_pain_price', 0):,.0f} | PCR {pcr.get('pcr_oi', 0):.2f} {pcr.get('emoji', '')}")
         except Exception as e:
             print(f"   ⚠️ Options analysis failed: {e}")
+        
+        # Open Interest Analysis (avancée avec delta)
+        oi_analysis_result = {}
+        try:
+            oi_analyzer = OpenInterestAnalyzer()
+            
+            # Récupérer l'OI de tous les exchanges
+            if multi_exchange_data.get('open_interest', {}).get('by_exchange'):
+                open_interests = multi_exchange_data['open_interest']['by_exchange']
+            else:
+                open_interests = {'bitget': oi_data.get('amount', 0)}
+            
+            oi_analysis_result = oi_analyzer.analyze(current_price, open_interests)
+            delta = oi_analysis_result.get('delta', {})
+            sig = oi_analysis_result.get('signal', {})
+            
+            if delta.get('available'):
+                delta_1h = delta.get('1h', {}).get('delta_oi_pct', 0)
+                print(f"   📊 Open Interest: {sig.get('emoji', '⚪')} {oi_analysis_result.get('total_oi_btc', 0):,.0f} BTC | Δ1h: {delta_1h:+.2f}%")
+            else:
+                print(f"   📊 Open Interest: {oi_analysis_result.get('total_oi_btc', 0):,.0f} BTC (tracking)")
+        except Exception as e:
+            print(f"   ⚠️ OI Analysis failed: {e}")
     
     # ==========================================
     # 5. DECISION ENGINE V2

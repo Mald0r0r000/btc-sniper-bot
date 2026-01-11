@@ -15,6 +15,7 @@ from .derivatives import DerivativesAnalyzer
 from .onchain import OnChainAnalyzer, StablecoinAnalyzer
 from .sentiment import SentimentAnalyzer, NewsAnalyzer
 from .macro import MacroAnalyzer
+from .open_interest import OpenInterestAnalyzer
 
 # Options Deribit
 from .deribit_options import DeribitOptionsAnalyzer, OptionsAnalyzer
@@ -37,6 +38,7 @@ __all__ = [
     'SentimentAnalyzer',
     'NewsAnalyzer',
     'MacroAnalyzer',
+    'OpenInterestAnalyzer',
     
     # Options
     'DeribitOptionsAnalyzer',
