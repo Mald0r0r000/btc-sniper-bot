@@ -29,6 +29,8 @@ class TelegramNotifier:
         """Envoie un message texte"""
         if not self.is_configured():
             print("⚠️ Telegram non configuré")
+            print(f"   Token: {'Oui' if self.bot_token else 'Non'}")
+            print(f"   Chat ID: {'Oui' if self.chat_id else 'Non'}")
             return False
         
         try:
@@ -42,6 +44,9 @@ class TelegramNotifier:
                 },
                 timeout=10
             )
+            if not response.ok:
+                print(f"❌ Telegram API Error: {response.status_code}")
+                print(f"   Response: {response.text[:200]}")
             return response.ok
         except Exception as e:
             print(f"❌ Erreur Telegram: {e}")
@@ -58,10 +63,6 @@ class TelegramNotifier:
         confidence = signal.get('confidence', 0)
         signal_type = signal.get('type', 'UNKNOWN')
         direction = signal.get('direction', 'NEUTRAL')
-        
-        # Ne notifier que les signaux forts (>60 de confiance)
-        if confidence < 60:
-            return False
         
         # Emoji selon direction
         if direction == 'BULLISH':
