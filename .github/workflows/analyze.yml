@@ -1,9 +1,9 @@
 name: BTC Sniper Bot 24/7
 
 on:
-  # Exécution toutes les 15 minutes
+  # Exécution toutes les 5 minutes
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/5 * * * *'
   
   # Permet aussi l'exécution manuelle
   workflow_dispatch:

@@ -53,8 +53,8 @@ def run_scheduled_analysis() -> Dict[str, Any]:
         print(f"📈 Direction: {direction}")
         print(f"📊 Confiance: {confidence:.0f}/100")
         
-        # Notifier si signal fort (confiance >= 60)
-        if telegram_enabled and confidence >= 60:
+        # Notifier si signal fort (confiance >= 51% pour test)
+        if telegram_enabled and confidence >= 51:
             print("\n📱 Envoi notification Telegram...")
             if notifier.send_signal_alert(report):
                 print("✅ Notification envoyée!")
