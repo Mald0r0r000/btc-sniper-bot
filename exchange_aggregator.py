@@ -56,31 +56,39 @@ class ExchangeConnection:
         except Exception as e:
             return {'exchange': self.exchange_id, 'error': str(e), 'success': False}
     
-    def fetch_ticker(self) -> Dict[str, Any]:
-        """Récupère le ticker"""
-        try:
-            ticker = self.exchange.fetch_ticker(self.symbol)
-            
-            # Safe float conversion (Binance renvoie parfois None)
-            def safe_float(value, default=0.0):
-                if value is None:
-                    return default
-                try:
-                    return float(value)
-                except (ValueError, TypeError):
-                    return default
-            
-            return {
-                'exchange': self.exchange_id,
-                'last': safe_float(ticker.get('last')),
-                'bid': safe_float(ticker.get('bid')),
-                'ask': safe_float(ticker.get('ask')),
-                'volume_24h': safe_float(ticker.get('quoteVolume')),
-                'change_24h': safe_float(ticker.get('percentage')),
-                'success': True
-            }
-        except Exception as e:
-            return {'exchange': self.exchange_id, 'error': str(e), 'success': False}
+    def fetch_ticker(self, retries: int = 3) -> Dict[str, Any]:
+        """Récupère le ticker avec retry"""
+        import time
+        
+        last_error = None
+        for attempt in range(retries):
+            try:
+                ticker = self.exchange.fetch_ticker(self.symbol)
+                
+                # Safe float conversion (Binance renvoie parfois None)
+                def safe_float(value, default=0.0):
+                    if value is None:
+                        return default
+                    try:
+                        return float(value)
+                    except (ValueError, TypeError):
+                        return default
+                
+                return {
+                    'exchange': self.exchange_id,
+                    'last': safe_float(ticker.get('last')),
+                    'bid': safe_float(ticker.get('bid')),
+                    'ask': safe_float(ticker.get('ask')),
+                    'volume_24h': safe_float(ticker.get('quoteVolume')),
+                    'change_24h': safe_float(ticker.get('percentage')),
+                    'success': True
+                }
+            except Exception as e:
+                last_error = e
+                if attempt < retries - 1:
+                    time.sleep(0.5 * (attempt + 1))  # Délai progressif
+        
+        return {'exchange': self.exchange_id, 'error': str(last_error), 'success': False}
     
     def fetch_funding_rate(self) -> Dict[str, Any]:
         """Récupère le funding rate"""
