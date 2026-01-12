@@ -91,7 +91,7 @@ def run_scheduled_analysis() -> Dict[str, Any]:
         print(f"📈 Direction: {direction}")
         print(f"📊 Confiance: {confidence:.0f}/100")
         
-        # Sauvegarder le signal dans le Gist
+        # Sauvegarder le signal enrichi dans le Gist
         signal_record = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "price": report.get("price", 0),
@@ -99,10 +99,25 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 "type": signal.get("type"),
                 "direction": direction,
                 "confidence": confidence,
-                "strength": signal.get("strength")
+                "strength": signal.get("strength"),
+                "manipulation_penalty": signal.get("manipulation_penalty", 0)
             },
             "dimension_scores": signal.get("dimension_scores", {}),
-            "targets": signal.get("targets", {})
+            "targets": signal.get("targets", {}),
+            # Données enrichies pour analyse
+            "market_context": report.get("market_context", {}),
+            "consistency": report.get("consistency", {}),
+            "fluid_dynamics": {
+                "venturi": report.get("venturi", {}),
+                "self_trading": report.get("self_trading", {})
+            },
+            # Métriques clés extraites
+            "key_metrics": {
+                "vwap": report.get("vwap_global"),
+                "fear_greed": report.get("sentiment", {}).get("fear_greed", {}).get("value"),
+                "oi_delta_1h": report.get("open_interest", {}).get("delta", {}).get("1h", {}).get("delta_oi_pct"),
+                "exchanges_connected": report.get("exchanges_connected", 0)
+            }
         }
         data_store.save_signal(signal_record)
         
