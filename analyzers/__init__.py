@@ -20,6 +20,9 @@ from .open_interest import OpenInterestAnalyzer
 # Options Deribit
 from .deribit_options import DeribitOptionsAnalyzer, OptionsAnalyzer
 
+# Fluid Dynamics (R&D)
+from .fluid_dynamics import SelfTradingDetector, VenturiAnalyzer
+
 __all__ = [
     # Core analyzers
     'OrderBookAnalyzer',
@@ -42,5 +45,10 @@ __all__ = [
     
     # Options
     'DeribitOptionsAnalyzer',
-    'OptionsAnalyzer'
+    'OptionsAnalyzer',
+    
+    # Fluid Dynamics (R&D)
+    'SelfTradingDetector',
+    'VenturiAnalyzer'
 ]
+

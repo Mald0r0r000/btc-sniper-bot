@@ -23,7 +23,9 @@ from analyzers import (
     SentimentAnalyzer,
     MacroAnalyzer,
     OptionsAnalyzer,
-    OpenInterestAnalyzer
+    OpenInterestAnalyzer,
+    SelfTradingDetector,
+    VenturiAnalyzer
 )
 from decision_engine_v2 import DecisionEngineV2
 
@@ -243,6 +245,30 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
                 print(f"   📊 Open Interest: {oi_analysis_result.get('total_oi_btc', 0):,.0f} BTC (tracking)")
         except Exception as e:
             print(f"   ⚠️ OI Analysis failed: {e}")
+        
+        # Self-Trading Detection (Fluid Dynamics R&D)
+        self_trading_result = {}
+        try:
+            detector = SelfTradingDetector()
+            self_trading_result = detector.analyze(trades, current_price, cvd_result)
+            if self_trading_result.get('detected'):
+                print(f"   🔍 Self-Trading: ⚠️ {self_trading_result['type']} détecté ({self_trading_result['probability']:.0f}%)")
+            else:
+                print(f"   🔍 Self-Trading: ✅ Marché sain")
+        except Exception as e:
+            print(f"   ⚠️ Self-Trading detection failed: {e}")
+        
+        # Venturi Analysis (Fluid Dynamics R&D)
+        venturi_result = {}
+        try:
+            venturi = VenturiAnalyzer()
+            venturi_result = venturi.analyze(order_book)
+            if venturi_result.get('compression_detected'):
+                print(f"   🌊 Venturi: ⚡ Compression → {venturi_result['direction']} ({venturi_result['breakout_probability']:.0f}%)")
+            else:
+                print(f"   🌊 Venturi: Marché fluide")
+        except Exception as e:
+            print(f"   ⚠️ Venturi analysis failed: {e}")
     
     # ==========================================
     # 5. DECISION ENGINE V2
