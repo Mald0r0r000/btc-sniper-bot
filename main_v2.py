@@ -391,7 +391,11 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
                 'iv_analysis': options_result.get('iv_analysis'),
                 'score': options_result.get('score')
             } if options_result else None,
-            'open_interest': oi_data
+            'open_interest': oi_data,
+            'fluid_dynamics': {
+                'venturi': venturi_result if venturi_result else None,
+                'self_trading': self_trading_result if self_trading_result else None
+            }
         }
     }
     
