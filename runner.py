@@ -41,6 +41,15 @@ def run_scheduled_analysis() -> Dict[str, Any]:
     else:
         print("⚠️ Stockage désactivé (GITHUB_TOKEN manquant)")
     
+    # Récupérer l'historique pour consistency check
+    from consistency_checker import ConsistencyChecker
+    
+    history = data_store.get_recent_signals(count=5)
+    consistency_result = {"score": 0, "status": "NEW"}
+    
+    if history:
+        print(f"📊 {len(history)} signaux historiques chargés")
+    
     try:
         # Exécuter l'analyse (mode full pour max de données)
         report = run_analysis_v2(mode='full')
@@ -48,6 +57,26 @@ def run_scheduled_analysis() -> Dict[str, Any]:
         if not report:
             print("❌ Analyse échouée")
             return None
+        
+        # Calculer le consistency check
+        current_signal = {
+            "direction": report.get('signal', {}).get('direction', 'NEUTRAL'),
+            "confidence": report.get('signal', {}).get('confidence', 50)
+        }
+        
+        if history:
+            checker = ConsistencyChecker()
+            consistency_result = checker.check_consistency(current_signal, history)
+            
+            # Afficher le résultat
+            print(f"\n🔄 Consistency: {consistency_result['status']}")
+            if consistency_result['score'] != 0:
+                print(f"   Score ajustement: {consistency_result['score']:+d}")
+            for detail in consistency_result.get('details', []):
+                print(f"   {detail}")
+        
+        # Ajouter le consistency au rapport
+        report['consistency'] = consistency_result
         
         # Sauvegarder le rapport localement
         with open('analysis_report.json', 'w', encoding='utf-8') as f:

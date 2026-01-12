@@ -103,15 +103,38 @@ class DecisionEngineV2:
     8. Macro (DXY, SPX correlation) - 10%
     """
     
-    # Configuration des poids (total = 100)
-    WEIGHT_CONFIG = {
-        'technical': 25,
-        'structure': 15,
-        'multi_exchange': 15,
-        'derivatives': 15,
-        'onchain': 10,
-        'sentiment': 10,
-        'macro': 10
+    # Configuration des poids par style de trading
+    WEIGHT_CONFIGS = {
+        # Style par défaut (mixte)
+        'default': {
+            'technical': 25,
+            'structure': 15,
+            'multi_exchange': 15,
+            'derivatives': 15,
+            'onchain': 10,
+            'sentiment': 10,
+            'macro': 10
+        },
+        # Intraday/Swing avec levier - Focus sur structure et flow
+        'swing': {
+            'technical': 20,     # Légèrement réduit
+            'structure': 20,     # Augmenté (support/résistance crucial)
+            'multi_exchange': 5, # Réduit (moins critique pour swing)
+            'derivatives': 15,   # Inchangé (funding + OI important)
+            'onchain': 15,       # Augmenté (whale tracking)
+            'sentiment': 10,     # Inchangé
+            'macro': 15          # Augmenté (direction générale)
+        },
+        # Scalping - Focus sur order flow
+        'scalp': {
+            'technical': 35,
+            'structure': 10,
+            'multi_exchange': 20,
+            'derivatives': 15,
+            'onchain': 5,
+            'sentiment': 5,
+            'macro': 10
+        }
     }
     
     # Seuils de confiance
@@ -145,9 +168,23 @@ class DecisionEngineV2:
         # Données macro
         macro_data: Dict = None,
         # Open Interest
-        open_interest: Dict = None
+        open_interest: Dict = None,
+        # Options Deribit
+        options_data: Dict = None,
+        # Style de trading
+        trading_style: str = 'swing',
+        # Bonus/malus de consistency
+        consistency_bonus: int = 0
     ):
         self.price = current_price
+        self.trading_style = trading_style
+        self.consistency_bonus = consistency_bonus
+        
+        # Sélectionner les poids selon le style
+        self.WEIGHT_CONFIG = self.WEIGHT_CONFIGS.get(
+            trading_style, 
+            self.WEIGHT_CONFIGS['default']
+        )
         
         # Core data
         self.ob = order_book_data or {}
@@ -166,6 +203,7 @@ class DecisionEngineV2:
         self.sentiment = sentiment_data or {}
         self.macro = macro_data or {}
         self.oi = open_interest or {}
+        self.options = options_data or {}
     
     def generate_composite_signal(self) -> Dict[str, Any]:
         """
@@ -184,10 +222,13 @@ class DecisionEngineV2:
         manipulation_penalty = self._calculate_manipulation_penalty()
         adjusted_score = max(0, raw_score - manipulation_penalty)
         
-        # 4. Déterminer la direction
+        # 4. Appliquer le bonus/malus de consistency
+        adjusted_score = max(0, min(100, adjusted_score + self.consistency_bonus))
+        
+        # 5. Déterminer la direction
         direction = self._determine_direction(dimension_scores)
         
-        # 5. Sélectionner le type de signal
+        # 6. Sélectionner le type de signal
         signal_type = self._select_signal_type(dimension_scores, direction)
         
         # 6. Générer les détails du signal
