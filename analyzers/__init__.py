@@ -23,6 +23,9 @@ from .deribit_options import DeribitOptionsAnalyzer, OptionsAnalyzer
 # Fluid Dynamics (R&D)
 from .fluid_dynamics import SelfTradingDetector, VenturiAnalyzer
 
+# Liquidation Zones (R&D)
+from .liquidation_zones import LiquidationZoneAnalyzer
+
 __all__ = [
     # Core analyzers
     'OrderBookAnalyzer',
@@ -49,6 +52,9 @@ __all__ = [
     
     # Fluid Dynamics (R&D)
     'SelfTradingDetector',
-    'VenturiAnalyzer'
+    'VenturiAnalyzer',
+    
+    # Liquidation Zones (R&D)
+    'LiquidationZoneAnalyzer'
 ]
 

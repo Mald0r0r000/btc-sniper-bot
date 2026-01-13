@@ -14,6 +14,7 @@ from enum import Enum
 import numpy as np
 
 import config
+from analyzers.liquidation_zones import LiquidationZoneAnalyzer
 
 
 class SignalType(Enum):
@@ -174,7 +175,9 @@ class DecisionEngineV2:
         # Style de trading
         trading_style: str = 'swing',
         # Bonus/malus de consistency
-        consistency_bonus: int = 0
+        consistency_bonus: int = 0,
+        # Candles pour liquidation zones
+        candles_5m: List[Dict] = None
     ):
         self.price = current_price
         self.trading_style = trading_style
@@ -204,6 +207,11 @@ class DecisionEngineV2:
         self.macro = macro_data or {}
         self.oi = open_interest or {}
         self.options = options_data or {}
+        self.candles_5m = candles_5m or []
+        
+        # Liquidation Zone Analyzer
+        self.liq_analyzer = LiquidationZoneAnalyzer()
+        self.liq_analysis = None
     
     def generate_composite_signal(self) -> Dict[str, Any]:
         """
@@ -647,67 +655,83 @@ class DecisionEngineV2:
     
     def _generate_targets(self, signal_type: SignalType, direction: SignalDirection) -> Dict[str, float]:
         """
-        Génère les targets (TP/SL) cohérents avec la direction
+        Génère les targets (TP/SL) basés sur les zones de liquidation
         
-        LONG: TP doit être > prix actuel, SL < prix actuel
-        SHORT: TP doit être < prix actuel, SL > prix actuel
+        Priorité:
+        1. Zones de liquidation (aimants à prix)
+        2. Volume Profile (fallback)
+        3. Pourcentage fixe (dernier recours)
+        
+        LONG: TP = zones de liq des shorts au-dessus, SL = zone de liq des longs en-dessous
+        SHORT: TP = zones de liq des longs en-dessous, SL = zone de liq des shorts au-dessus
         """
         targets = {}
+        current_price = self.price
+        direction_str = 'LONG' if direction == SignalDirection.LONG else 'SHORT'
         
+        # 1. Essayer les zones de liquidation si on a des candles
+        if self.candles_5m and len(self.candles_5m) >= 20:
+            try:
+                # Calculer l'analyse des zones de liquidation
+                self.liq_analysis = self.liq_analyzer.analyze(self.candles_5m, current_price=current_price)
+                
+                # Obtenir les targets basés sur les liq zones
+                liq_targets = self.liq_analyzer.get_targets_for_direction(self.liq_analysis, direction_str)
+                
+                # Valider que les targets sont cohérents avec la direction
+                if direction == SignalDirection.LONG:
+                    if liq_targets.get('tp1', 0) > current_price:
+                        targets['tp1'] = liq_targets['tp1']
+                    if liq_targets.get('tp2', 0) > current_price:
+                        targets['tp2'] = liq_targets['tp2']
+                    if liq_targets.get('sl', float('inf')) < current_price:
+                        targets['sl'] = liq_targets['sl']
+                elif direction == SignalDirection.SHORT:
+                    if liq_targets.get('tp1', float('inf')) < current_price:
+                        targets['tp1'] = liq_targets['tp1']
+                    if liq_targets.get('tp2', float('inf')) < current_price:
+                        targets['tp2'] = liq_targets['tp2']
+                    if liq_targets.get('sl', 0) > current_price:
+                        targets['sl'] = liq_targets['sl']
+            except Exception:
+                pass  # Fallback to VP if liq zones fail
+        
+        # 2. Fallback: Volume Profile pour les targets manquants
         poc = self.vp.get('poc', 0)
         vah = self.vp.get('vah', 0)
         val = self.vp.get('val', 0)
-        current_price = self.price
         
         if direction == SignalDirection.LONG:
-            # Pour LONG: TP doit être AU-DESSUS du prix actuel
-            # SL doit être EN-DESSOUS du prix actuel
-            
-            # TP1: Chercher le premier niveau au-dessus du prix
-            if vah > current_price:
-                targets['tp1'] = vah
-            elif poc > current_price:
-                targets['tp1'] = poc
-            else:
-                # Fallback: +1% du prix actuel
-                targets['tp1'] = round(current_price * 1.01, 1)
-            
-            # TP2: Niveau plus élevé ou +2%
-            if vah > current_price and vah > targets.get('tp1', 0):
-                targets['tp2'] = vah
-            else:
+            if 'tp1' not in targets:
+                if vah > current_price:
+                    targets['tp1'] = vah
+                elif poc > current_price:
+                    targets['tp1'] = poc
+            if 'tp2' not in targets:
                 targets['tp2'] = round(current_price * 1.02, 1)
-            
-            # SL: Niveau en-dessous ou -0.5%
-            if val > 0 and val < current_price:
-                targets['sl'] = val * 0.995
-            else:
-                targets['sl'] = round(current_price * 0.995, 2)
-                
+            if 'sl' not in targets:
+                if val > 0 and val < current_price:
+                    targets['sl'] = round(val * 0.995, 2)
+                    
         elif direction == SignalDirection.SHORT:
-            # Pour SHORT: TP doit être EN-DESSOUS du prix actuel
-            # SL doit être AU-DESSUS du prix actuel
-            
-            # TP1: Chercher le premier niveau en-dessous du prix
-            if val > 0 and val < current_price:
-                targets['tp1'] = val
-            elif poc > 0 and poc < current_price:
-                targets['tp1'] = poc
-            else:
-                # Fallback: -1% du prix actuel
-                targets['tp1'] = round(current_price * 0.99, 1)
-            
-            # TP2: Niveau plus bas ou -2%
-            if val > 0 and val < targets.get('tp1', float('inf')):
-                targets['tp2'] = val
-            else:
+            if 'tp1' not in targets:
+                if val > 0 and val < current_price:
+                    targets['tp1'] = val
+                elif poc > 0 and poc < current_price:
+                    targets['tp1'] = poc
+            if 'tp2' not in targets:
                 targets['tp2'] = round(current_price * 0.98, 1)
-            
-            # SL: Niveau au-dessus ou +0.5%
-            if vah > current_price:
-                targets['sl'] = vah * 1.005
-            else:
-                targets['sl'] = round(current_price * 1.005, 2)
+            if 'sl' not in targets:
+                if vah > current_price:
+                    targets['sl'] = round(vah * 1.005, 2)
+        
+        # 3. Fallback final: pourcentages fixes
+        if 'tp1' not in targets:
+            targets['tp1'] = round(current_price * (1.01 if direction == SignalDirection.LONG else 0.99), 1)
+        if 'tp2' not in targets:
+            targets['tp2'] = round(current_price * (1.02 if direction == SignalDirection.LONG else 0.98), 1)
+        if 'sl' not in targets:
+            targets['sl'] = round(current_price * (0.995 if direction == SignalDirection.LONG else 1.005), 2)
         
         return targets
     

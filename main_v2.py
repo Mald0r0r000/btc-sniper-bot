@@ -290,7 +290,8 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         macro_data=macro_result,
         open_interest=oi_data,
         options_data=options_result,
-        trading_style='swing'  # Style adapté pour levier x20
+        trading_style='swing',  # Style adapté pour levier x20
+        candles_5m=candles_5m  # Pour les zones de liquidation
     )
     
     decision_result = engine.generate_composite_signal()
