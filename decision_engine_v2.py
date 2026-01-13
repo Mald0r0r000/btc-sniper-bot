@@ -688,8 +688,10 @@ class DecisionEngineV2:
                 # Calculer l'analyse des zones de liquidation
                 self.liq_analysis = self.liq_analyzer.analyze(self.candles_5m, current_price=current_price)
                 
-                # Obtenir les targets basés sur les liq zones
-                liq_targets = self.liq_analyzer.get_targets_for_direction(self.liq_analysis, direction_str)
+                # Obtenir les targets basés sur les liq zones (avec ton levier 20x)
+                liq_targets = self.liq_analyzer.get_targets_for_direction(
+                    self.liq_analysis, direction_str, user_leverage=20
+                )
                 
                 # Valider que les targets sont cohérents avec la direction
                 if direction == SignalDirection.LONG:
@@ -745,6 +747,55 @@ class DecisionEngineV2:
             targets['tp2'] = round(current_price * (1.02 if direction == SignalDirection.LONG else 0.98), 1)
         if 'sl' not in targets:
             targets['sl'] = round(current_price * (0.995 if direction == SignalDirection.LONG else 1.005), 2)
+        
+        # 4. Validation finale: contraintes R:R et distance max
+        targets = self._validate_and_adjust_targets(targets, current_price, direction)
+        
+        return targets
+    
+    def _validate_and_adjust_targets(self, targets: Dict[str, float], 
+                                     current_price: float, 
+                                     direction: SignalDirection) -> Dict[str, float]:
+        """
+        Valide et ajuste les targets pour assurer:
+        - SL max distance: 2% du prix
+        - R:R minimum: 1:1.5 (risque 1 pour gain 1.5)
+        """
+        MAX_SL_DISTANCE_PCT = 0.02  # 2% max
+        MIN_RR_RATIO = 1.5  # R:R minimum 1:1.5
+        
+        tp1 = targets.get('tp1', current_price)
+        tp2 = targets.get('tp2', current_price)
+        sl = targets.get('sl', current_price)
+        
+        if direction == SignalDirection.LONG:
+            # Calculer les distances
+            tp1_distance = tp1 - current_price
+            sl_distance = current_price - sl
+            sl_distance_pct = sl_distance / current_price
+            
+            # Si SL trop loin, ajuster
+            if sl_distance_pct > MAX_SL_DISTANCE_PCT:
+                # Option 1: SL basé sur R:R par rapport à TP1
+                ideal_sl_distance = tp1_distance / MIN_RR_RATIO
+                
+                # Option 2: SL à 2% max
+                max_sl_distance = current_price * MAX_SL_DISTANCE_PCT
+                
+                # Prendre le plus serré des deux
+                new_sl_distance = min(ideal_sl_distance, max_sl_distance)
+                targets['sl'] = round(current_price - new_sl_distance, 2)
+        
+        elif direction == SignalDirection.SHORT:
+            tp1_distance = current_price - tp1
+            sl_distance = sl - current_price
+            sl_distance_pct = sl_distance / current_price
+            
+            if sl_distance_pct > MAX_SL_DISTANCE_PCT:
+                ideal_sl_distance = tp1_distance / MIN_RR_RATIO
+                max_sl_distance = current_price * MAX_SL_DISTANCE_PCT
+                new_sl_distance = min(ideal_sl_distance, max_sl_distance)
+                targets['sl'] = round(current_price + new_sl_distance, 2)
         
         return targets
     

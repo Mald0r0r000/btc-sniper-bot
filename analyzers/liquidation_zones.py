@@ -119,13 +119,20 @@ class LiquidationZoneAnalyzer:
             'timestamp': datetime.now(timezone.utc).isoformat()
         }
     
-    def get_targets_for_direction(self, analysis: Dict, direction: str) -> Dict[str, float]:
+    def get_targets_for_direction(self, analysis: Dict, direction: str,
+                                    user_leverage: int = 20) -> Dict[str, float]:
         """
         Génère les TP/SL basés sur les zones de liquidation
+        
+        SL Logic (Mix A+B+C):
+        - A) Filtrer sur leviers 25-100x (ignorer 10x trop loin)
+        - B) Ne pas dépasser ta propre liq en user_leverage
+        - C) Prendre le cluster le plus fort (plus de zones)
         
         Args:
             analysis: Résultat de analyze()
             direction: 'LONG' ou 'SHORT'
+            user_leverage: Ton levier de trading (default 20x)
         
         Returns:
             Dict avec tp1, tp2, sl
@@ -136,35 +143,48 @@ class LiquidationZoneAnalyzer:
         
         targets = {}
         
+        # Calculer ta propre zone de liquidation (limite max pour SL)
+        user_liq_distance_pct = (1 / user_leverage) * 0.75  # ~3.75% pour 20x
+        
         if direction == 'LONG':
-            # LONG: TP = zones de liq des SHORTS au-dessus (ils seront squeeze)
-            # SL = zone de liq des LONGS en-dessous (on veut pas être liquidé avec eux)
-            
+            # === TP: zones de liq des SHORTS au-dessus ===
             if clusters_above:
-                # Premier cluster de shorts au-dessus = TP1
                 short_clusters = [c for c in clusters_above if not c.get('is_long', True)]
                 if short_clusters:
                     targets['tp1'] = short_clusters[0]['center_price']
                     if len(short_clusters) > 1:
                         targets['tp2'] = short_clusters[1]['center_price']
                 else:
-                    # Fallback: premier cluster au-dessus
                     targets['tp1'] = clusters_above[0]['center_price']
             
+            # === SL: Smart avec A+B+C ===
             if clusters_below:
-                # Zone de liq des longs en-dessous = SL (avec buffer)
-                long_clusters = [c for c in clusters_below if c.get('is_long', False)]
-                if long_clusters:
-                    # SL juste en-dessous de la zone de liq
-                    targets['sl'] = long_clusters[0]['center_price'] * 0.998
+                # A) Filtrer: garder seulement les clusters avec leviers >= 25x
+                high_lev_clusters = [
+                    c for c in clusters_below 
+                    if c.get('is_long', False) and 
+                    any(lev >= 25 for lev in c.get('leverages', []))
+                ]
+                
+                # B) Limite: ta propre liq en user_leverage
+                user_max_sl = current_price * (1 - user_liq_distance_pct)
+                
+                # Filtrer les clusters qui ne dépassent pas ta liq
+                valid_clusters = [
+                    c for c in high_lev_clusters 
+                    if c['center_price'] >= user_max_sl
+                ]
+                
+                if valid_clusters:
+                    # C) Prendre le plus fort (plus de zones)
+                    strongest = max(valid_clusters, key=lambda c: c['strength'])
+                    targets['sl'] = strongest['center_price'] * 0.998
                 else:
-                    # Fallback: premier cluster en-dessous
-                    targets['sl'] = clusters_below[0]['center_price'] * 0.998
+                    # Fallback: ta propre liq comme SL
+                    targets['sl'] = round(user_max_sl, 2)
         
         elif direction == 'SHORT':
-            # SHORT: TP = zones de liq des LONGS en-dessous (ils seront flush)
-            # SL = zone de liq des SHORTS au-dessus
-            
+            # === TP: zones de liq des LONGS en-dessous ===
             if clusters_below:
                 long_clusters = [c for c in clusters_below if c.get('is_long', False)]
                 if long_clusters:
@@ -174,12 +194,31 @@ class LiquidationZoneAnalyzer:
                 else:
                     targets['tp1'] = clusters_below[0]['center_price']
             
+            # === SL: Smart avec A+B+C ===
             if clusters_above:
-                short_clusters = [c for c in clusters_above if not c.get('is_long', True)]
-                if short_clusters:
-                    targets['sl'] = short_clusters[0]['center_price'] * 1.002
+                # A) Filtrer: garder seulement les clusters avec leviers >= 25x
+                high_lev_clusters = [
+                    c for c in clusters_above 
+                    if not c.get('is_long', True) and 
+                    any(lev >= 25 for lev in c.get('leverages', []))
+                ]
+                
+                # B) Limite: ta propre liq en user_leverage
+                user_max_sl = current_price * (1 + user_liq_distance_pct)
+                
+                # Filtrer les clusters qui ne dépassent pas ta liq
+                valid_clusters = [
+                    c for c in high_lev_clusters 
+                    if c['center_price'] <= user_max_sl
+                ]
+                
+                if valid_clusters:
+                    # C) Prendre le plus fort (plus de zones)
+                    strongest = max(valid_clusters, key=lambda c: c['strength'])
+                    targets['sl'] = strongest['center_price'] * 1.002
                 else:
-                    targets['sl'] = clusters_above[0]['center_price'] * 1.002
+                    # Fallback: ta propre liq comme SL
+                    targets['sl'] = round(user_max_sl, 2)
         
         # Fallbacks si pas assez de zones
         if 'tp1' not in targets:
@@ -187,7 +226,11 @@ class LiquidationZoneAnalyzer:
         if 'tp2' not in targets:
             targets['tp2'] = current_price * (1.02 if direction == 'LONG' else 0.98)
         if 'sl' not in targets:
-            targets['sl'] = current_price * (0.995 if direction == 'LONG' else 1.005)
+            # Fallback: ta propre liq
+            if direction == 'LONG':
+                targets['sl'] = current_price * (1 - user_liq_distance_pct)
+            else:
+                targets['sl'] = current_price * (1 + user_liq_distance_pct)
         
         return {k: round(v, 1) for k, v in targets.items()}
     
