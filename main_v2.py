@@ -87,6 +87,9 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     
     print(f"   📈 Bougies: {len(df_micro)} (5m) | {len(df_meso)} (1h) | {len(df_macro)} (1d)")
     
+    # Convertir en liste de dicts pour les Liquidation Zones
+    candles_5m = df_micro.to_dict('records') if df_micro is not None and len(df_micro) > 0 else []
+    
     # Order Book
     order_book = connector.fetch_order_book(limit=config.ORDER_BOOK_LIMIT)
     
