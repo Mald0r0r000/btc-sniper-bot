@@ -177,7 +177,10 @@ class DecisionEngineV2:
         # Bonus/malus de consistency
         consistency_bonus: int = 0,
         # Candles pour liquidation zones
-        candles_5m: List[Dict] = None
+        candles_5m: List[Dict] = None,
+        # Fluid Dynamics (Venturi et Self-Trading)
+        venturi_data: Dict = None,
+        self_trading_data: Dict = None
     ):
         self.price = current_price
         self.trading_style = trading_style
@@ -212,6 +215,10 @@ class DecisionEngineV2:
         # Liquidation Zone Analyzer
         self.liq_analyzer = LiquidationZoneAnalyzer()
         self.liq_analysis = None
+        
+        # Fluid Dynamics data
+        self.venturi = venturi_data or {}
+        self.self_trading = self_trading_data or {}
     
     def generate_composite_signal(self) -> Dict[str, Any]:
         """
@@ -232,6 +239,12 @@ class DecisionEngineV2:
         
         # 4. Appliquer le bonus/malus de consistency
         adjusted_score = max(0, min(100, adjusted_score + self.consistency_bonus))
+        
+        # 4b. Appliquer les modifiers Fluid Dynamics
+        venturi_modifier = self.venturi.get('signal_modifier', 0)
+        self_trading_modifier = self.self_trading.get('signal_modifier', 0)
+        fluid_dynamics_modifier = venturi_modifier + self_trading_modifier
+        adjusted_score = max(0, min(100, adjusted_score + fluid_dynamics_modifier))
         
         # 5. Déterminer la direction
         direction = self._determine_direction(dimension_scores)

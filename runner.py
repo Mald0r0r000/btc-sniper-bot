@@ -108,8 +108,8 @@ def run_scheduled_analysis() -> Dict[str, Any]:
             "market_context": report.get("market_context", {}),
             "consistency": report.get("consistency", {}),
             "fluid_dynamics": {
-                "venturi": report.get("venturi", {}),
-                "self_trading": report.get("self_trading", {})
+                "venturi": report.get("indicators", {}).get("fluid_dynamics", {}).get("venturi", {}),
+                "self_trading": report.get("indicators", {}).get("fluid_dynamics", {}).get("self_trading", {})
             },
             # Métriques clés extraites
             "key_metrics": {
