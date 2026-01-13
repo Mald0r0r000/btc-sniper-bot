@@ -646,27 +646,68 @@ class DecisionEngineV2:
         return warnings
     
     def _generate_targets(self, signal_type: SignalType, direction: SignalDirection) -> Dict[str, float]:
-        """Génère les targets"""
+        """
+        Génère les targets (TP/SL) cohérents avec la direction
+        
+        LONG: TP doit être > prix actuel, SL < prix actuel
+        SHORT: TP doit être < prix actuel, SL > prix actuel
+        """
         targets = {}
         
         poc = self.vp.get('poc', 0)
         vah = self.vp.get('vah', 0)
         val = self.vp.get('val', 0)
+        current_price = self.price
         
         if direction == SignalDirection.LONG:
-            if poc > 0:
+            # Pour LONG: TP doit être AU-DESSUS du prix actuel
+            # SL doit être EN-DESSOUS du prix actuel
+            
+            # TP1: Chercher le premier niveau au-dessus du prix
+            if vah > current_price:
+                targets['tp1'] = vah
+            elif poc > current_price:
                 targets['tp1'] = poc
-            if vah > 0:
+            else:
+                # Fallback: +1% du prix actuel
+                targets['tp1'] = round(current_price * 1.01, 1)
+            
+            # TP2: Niveau plus élevé ou +2%
+            if vah > current_price and vah > targets.get('tp1', 0):
                 targets['tp2'] = vah
-            if val > 0:
+            else:
+                targets['tp2'] = round(current_price * 1.02, 1)
+            
+            # SL: Niveau en-dessous ou -0.5%
+            if val > 0 and val < current_price:
                 targets['sl'] = val * 0.995
+            else:
+                targets['sl'] = round(current_price * 0.995, 2)
+                
         elif direction == SignalDirection.SHORT:
-            if poc > 0:
+            # Pour SHORT: TP doit être EN-DESSOUS du prix actuel
+            # SL doit être AU-DESSUS du prix actuel
+            
+            # TP1: Chercher le premier niveau en-dessous du prix
+            if val > 0 and val < current_price:
+                targets['tp1'] = val
+            elif poc > 0 and poc < current_price:
                 targets['tp1'] = poc
-            if val > 0:
+            else:
+                # Fallback: -1% du prix actuel
+                targets['tp1'] = round(current_price * 0.99, 1)
+            
+            # TP2: Niveau plus bas ou -2%
+            if val > 0 and val < targets.get('tp1', float('inf')):
                 targets['tp2'] = val
-            if vah > 0:
+            else:
+                targets['tp2'] = round(current_price * 0.98, 1)
+            
+            # SL: Niveau au-dessus ou +0.5%
+            if vah > current_price:
                 targets['sl'] = vah * 1.005
+            else:
+                targets['sl'] = round(current_price * 1.005, 2)
         
         return targets
     
