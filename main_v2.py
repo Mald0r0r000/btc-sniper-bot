@@ -308,7 +308,8 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         trading_style='swing',  # Style adapté pour levier x20
         candles_5m=candles_5m,  # Pour les zones de liquidation
         venturi_data=venturi_result,  # Fluid dynamics - Venturi
-        self_trading_data=self_trading_result  # Fluid dynamics - Self-Trading
+        self_trading_data=self_trading_result,  # Fluid dynamics - Self-Trading
+        hyperliquid_data=hyperliquid_result  # Whale tracking sentiment
     )
     
     decision_result = engine.generate_composite_signal()
