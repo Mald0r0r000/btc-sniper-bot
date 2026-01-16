@@ -81,26 +81,44 @@ class TelegramNotifier:
         scores_text = '\n'.join([
             f"  • {dim}: {score:.0f}/100"
             for dim, score in dim_scores.items()
-        ])
+        ]) if dim_scores else '  • Scores non disponibles'
         
-        # Raisons
+        # Raisons (seulement si présentes)
         reasons = signal.get('reasons', [])
-        reasons_text = '\n'.join([f"  {r}" for r in reasons[:3]])
+        reasons_section = ''
+        if reasons:
+            reasons_text = '\n'.join([f"  {r}" for r in reasons[:3]])
+            reasons_section = f'\n<b>📝 Raisons:</b>\n{reasons_text}'
         
-        # Warnings
+        # Warnings (seulement si présents)
         warnings = signal.get('warnings', [])
-        warnings_text = '\n'.join([f"  ⚠️ {w}" for w in warnings[:2]]) if warnings else ''
+        warnings_section = ''
+        if warnings:
+            warnings_text = '\n'.join([f"  ⚠️ {w}" for w in warnings[:2]])
+            warnings_section = f'\n{warnings_text}'
         
-        # Targets
+        # Targets (seulement si présents)
         targets = signal.get('targets', {})
-        targets_text = ''
+        targets_section = ''
         if targets:
-            targets_text = '\n<b>🎯 Targets:</b>\n' + '\n'.join([
-                f"  • {k}: ${v:,.0f}" for k, v in targets.items()
-            ])
+            targets_text = '\n'.join([f"  • {k}: ${v:,.0f}" for k, v in targets.items()])
+            targets_section = f'\n<b>🎯 Targets:</b>\n{targets_text}'
         
-        message = f"""
-{direction_emoji} <b>SIGNAL BTC - {signal_type}</b>
+        # Market context
+        context = report.get('market_context', {})
+        context_section = ''
+        if context:
+            context_items = []
+            if context.get('quantum_state'):
+                context_items.append(f"⚛️ {context.get('quantum_state')}")
+            if context.get('vp_shape'):
+                context_items.append(f"📊 {context.get('vp_shape')}")
+            if context.get('fear_greed'):
+                context_items.append(f"😱 F&G: {context.get('fear_greed')}")
+            if context_items:
+                context_section = f"\n<b>🌍 Contexte:</b> {' | '.join(context_items)}"
+        
+        message = f"""{direction_emoji} <b>SIGNAL BTC - {signal_type}</b>
 
 <b>💰 Prix:</b> ${price:,.2f}
 <b>📊 Confiance:</b> {confidence:.0f}/100
@@ -108,15 +126,9 @@ class TelegramNotifier:
 <b>⏰ Heure:</b> {timestamp}
 
 <b>📊 Scores:</b>
-{scores_text}
+{scores_text}{context_section}{reasons_section}{targets_section}{warnings_section}
 
-<b>📝 Raisons:</b>
-{reasons_text}
-{targets_text}
-{warnings_text}
-
-<i>#BTC #Signal #{signal_type}</i>
-"""
+<i>#BTC #Signal #{signal_type}</i>"""
         
         return self.send_message(message.strip())
     
