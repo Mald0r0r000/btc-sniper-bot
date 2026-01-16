@@ -166,6 +166,18 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         except Exception as e:
             print(f"   ⚠️ Spoofing analysis failed: {e}")
         
+        
+        # Hyperliquid Advanced Analysis (R&D)
+        hyperliquid_result = {}
+        try:
+            hl_analyzer = HyperliquidAnalyzer()
+            hyperliquid_result = hl_analyzer.analyze()
+            market = hyperliquid_result.get('market', {})
+            whale = hyperliquid_result.get('whale_analysis', {})
+            print(f"   🔷 Hyperliquid: OI {market.get('open_interest_btc', 0):,.0f} BTC | Whales {whale.get('sentiment', 'NEUTRAL')}")
+        except Exception as e:
+            print(f"   ⚠️ Hyperliquid analysis failed: {e}")
+
         # Derivatives Analysis
         try:
             funding_rates = {}
@@ -178,9 +190,15 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
                 funding_rates = {'bitget': funding_data.get('current', 0)}
             
             if multi_exchange_data.get('open_interest'):
-                open_interests = multi_exchange_data['open_interest'].get('by_exchange', {})
+                open_interests = multi_exchange_data['open_interest'].get('by_exchange', {}).copy()
             else:
                 open_interests = {'bitget': oi_data.get('amount', 0)}
+            
+            # Injecter Funding Rate Hyperliquid (Normalisé à 8h pour comparaison)
+            if hyperliquid_result and hyperliquid_result.get('success'):
+                # Hyperliquid donne un taux horaire. CEXs donnent 8h.
+                hl_funding_1h = hyperliquid_result.get('market', {}).get('funding_rate', 0)
+                funding_rates['hyperliquid'] = hl_funding_1h * 8
             
             deriv_analyzer = DerivativesAnalyzer()
             derivatives_result = deriv_analyzer.analyze(current_price, funding_rates, open_interests)
@@ -227,6 +245,7 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         except Exception as e:
             print(f"   ⚠️ Options analysis failed: {e}")
         
+
         # Open Interest Analysis (avancée avec delta)
         oi_analysis_result = {}
         try:
@@ -234,9 +253,15 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
             
             # Récupérer l'OI de tous les exchanges
             if multi_exchange_data.get('open_interest', {}).get('by_exchange'):
-                open_interests = multi_exchange_data['open_interest']['by_exchange']
+                open_interests = multi_exchange_data['open_interest']['by_exchange'].copy()
             else:
                 open_interests = {'bitget': oi_data.get('amount', 0)}
+            
+            # Ajouter l'OI Hyperliquid s'il est disponible
+            if hyperliquid_result and hyperliquid_result.get('success'):
+                hl_oi = hyperliquid_result.get('market', {}).get('open_interest_btc', 0)
+                if hl_oi > 0:
+                    open_interests['hyperliquid'] = hl_oi
             
             oi_analysis_result = oi_analyzer.analyze(current_price, open_interests)
             delta = oi_analysis_result.get('delta', {})
@@ -274,16 +299,7 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         except Exception as e:
             print(f"   ⚠️ Venturi analysis failed: {e}")
         
-        # Hyperliquid Advanced Analysis (R&D)
-        hyperliquid_result = {}
-        try:
-            hl_analyzer = HyperliquidAnalyzer()
-            hyperliquid_result = hl_analyzer.analyze()
-            market = hyperliquid_result.get('market', {})
-            whale = hyperliquid_result.get('whale_analysis', {})
-            print(f"   🔷 Hyperliquid: OI {market.get('open_interest_btc', 0):,.0f} BTC | Whales {whale.get('sentiment', 'NEUTRAL')}")
-        except Exception as e:
-            print(f"   ⚠️ Hyperliquid analysis failed: {e}")
+
     
     # ==========================================
     # 5. DECISION ENGINE V2
