@@ -126,7 +126,9 @@ def run_scheduled_analysis() -> Dict[str, Any]:
         # Notifier si signal fort (confiance >= 60%)
         if telegram_enabled and confidence >= 60:
             print("\n📱 Envoi notification Telegram...")
-            if notifier.send_signal_alert(report):
+            # Récupérer l'historique pour le compteur de signaux consécutifs
+            signal_history = data_store.read_signals()[-20:]  # 20 derniers signaux
+            if notifier.send_signal_alert(report, signal_history=signal_history):
                 print("✅ Notification envoyée!")
             else:
                 print("❌ Échec notification")

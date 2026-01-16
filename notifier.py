@@ -52,12 +52,13 @@ class TelegramNotifier:
             print(f"❌ Erreur Telegram: {e}")
             return False
     
-    def send_signal_alert(self, report: Dict[str, Any]) -> bool:
+    def send_signal_alert(self, report: Dict[str, Any], signal_history: list = None) -> bool:
         """
-        Envoie une alerte pour un signal de trading
+        Envoie une alerte enrichie pour un signal de trading
         
         Args:
             report: Le rapport d'analyse complet
+            signal_history: Historique des signaux pour compter les consécutifs
         """
         signal = report.get('signal', {})
         confidence = signal.get('confidence', 0)
@@ -65,72 +66,164 @@ class TelegramNotifier:
         direction = signal.get('direction', 'NEUTRAL')
         
         # Emoji selon direction
-        if direction == 'BULLISH':
+        if direction == 'LONG' or direction == 'BULLISH':
             direction_emoji = '🟢📈'
-        elif direction == 'BEARISH':
+            dir_text = 'LONG'
+        elif direction == 'SHORT' or direction == 'BEARISH':
             direction_emoji = '🔴📉'
+            dir_text = 'SHORT'
         else:
-            direction_emoji = '⚪'
+            direction_emoji = '⚪💤'
+            dir_text = 'NEUTRAL'
         
-        # Construire le message
+        # Prix et timestamp
         price = report.get('price', 0)
-        timestamp = datetime.now().strftime('%H:%M:%S')
+        timestamp = datetime.now().strftime('%H:%M UTC')
         
-        # Scores par dimension
-        dim_scores = signal.get('dimension_scores', {})
-        scores_text = '\n'.join([
-            f"  • {dim}: {score:.0f}/100"
-            for dim, score in dim_scores.items()
-        ]) if dim_scores else '  • Scores non disponibles'
+        # ========== TARGETS & P&L AVEC LEVIER x23 ==========
+        targets = signal.get('targets', {})
+        leverage = 23
+        targets_section = ''
+        if targets and price > 0:
+            tp1 = targets.get('tp1', 0)
+            tp2 = targets.get('tp2', 0)
+            sl = targets.get('sl', 0)
+            
+            # Calcul des % bruts
+            if dir_text == 'LONG':
+                tp1_pct = ((tp1 - price) / price * 100) if tp1 else 0
+                tp2_pct = ((tp2 - price) / price * 100) if tp2 else 0
+                sl_pct = ((sl - price) / price * 100) if sl else 0
+            else:  # SHORT
+                tp1_pct = ((price - tp1) / price * 100) if tp1 else 0
+                tp2_pct = ((price - tp2) / price * 100) if tp2 else 0
+                sl_pct = ((price - sl) / price * 100) if sl else 0
+            
+            # P&L avec levier
+            tp1_leveraged = tp1_pct * leverage
+            tp2_leveraged = tp2_pct * leverage
+            sl_leveraged = abs(sl_pct) * leverage
+            
+            # R:R Ratio
+            risk = abs(sl_pct) if sl_pct != 0 else 1
+            rr_ratio = abs(tp1_pct) / risk if risk > 0 else 0
+            
+            targets_section = f"""
+<b>🎯 Targets (x{leverage}):</b>
+  • TP1: ${tp1:,.0f} → <b>+{tp1_leveraged:.0f}%</b>
+  • TP2: ${tp2:,.0f} → <b>+{tp2_leveraged:.0f}%</b>
+  • SL: ${sl:,.0f} → <b>-{sl_leveraged:.0f}%</b>
+  • R:R = {rr_ratio:.1f}:1"""
         
-        # Raisons (seulement si présentes)
+        # ========== CONTEXTE MARCHÉ ENRICHI ==========
+        context = report.get('market_context', {})
+        indicators = report.get('indicators', {})
+        
+        # Hyperliquid Whales
+        hyperliquid = indicators.get('hyperliquid', {}) or report.get('hyperliquid', {})
+        whale_sentiment = hyperliquid.get('whale_analysis', {}).get('sentiment', 'N/A')
+        whale_count = hyperliquid.get('whale_analysis', {}).get('active_whales', 0)
+        
+        # OI Delta
+        oi_data = indicators.get('open_interest', {}) or report.get('open_interest', {})
+        oi_delta = oi_data.get('delta', {}).get('1h', {}).get('delta_oi_pct', 0)
+        oi_emoji = '📈' if oi_delta > 0 else '📉' if oi_delta < 0 else '➡️'
+        
+        # Quantum State
+        quantum_state = context.get('quantum_state', 'N/A')
+        
+        # Venturi
+        fluid = indicators.get('fluid_dynamics', {}) or report.get('fluid_dynamics', {})
+        venturi = fluid.get('venturi', {})
+        venturi_dir = venturi.get('direction', 'N/A')
+        venturi_prob = venturi.get('probability', 0)
+        
+        # VWAP
+        vwap = report.get('vwap_global', 0) or report.get('multi_exchange', {}).get('vwap', 0)
+        vwap_vs_price = 'AU-DESSUS' if price > vwap else 'EN-DESSOUS' if price < vwap else '='
+        
+        # Exchanges
+        exchanges_connected = report.get('exchanges_connected', 0) or report.get('multi_exchange', {}).get('exchanges_connected', 0)
+        
+        context_section = f"""
+<b>🌍 Contexte:</b>
+  • 🐋 Whales: <b>{whale_sentiment}</b> ({whale_count} traders)
+  • {oi_emoji} OI Δ1h: <b>{oi_delta:+.1f}%</b>
+  • ⚛️ État: <b>{quantum_state}</b>
+  • 🌊 Venturi: → <b>{venturi_dir}</b> ({venturi_prob:.0f}%)
+  • 💵 Prix vs VWAP: {vwap_vs_price}"""
+        
+        # ========== COMPTEUR SIGNAUX CONSÉCUTIFS ==========
+        consecutive_section = ''
+        if signal_history:
+            consecutive_count = self._count_consecutive_signals(signal_history, dir_text)
+            if consecutive_count > 1:
+                ordinal = self._get_french_ordinal(consecutive_count)
+                consecutive_section = f"\n\n🔁 <b>{ordinal} signal {dir_text}</b> depuis retournement"
+        
+        # ========== RAISONS ==========
         reasons = signal.get('reasons', [])
         reasons_section = ''
         if reasons:
-            reasons_text = '\n'.join([f"  {r}" for r in reasons[:3]])
+            reasons_text = '\n'.join([f"  {r}" for r in reasons[:4]])
             reasons_section = f'\n<b>📝 Raisons:</b>\n{reasons_text}'
         
-        # Warnings (seulement si présents)
+        # ========== WARNINGS ==========
         warnings = signal.get('warnings', [])
         warnings_section = ''
         if warnings:
             warnings_text = '\n'.join([f"  ⚠️ {w}" for w in warnings[:2]])
             warnings_section = f'\n{warnings_text}'
         
-        # Targets (seulement si présents)
-        targets = signal.get('targets', {})
-        targets_section = ''
-        if targets:
-            targets_text = '\n'.join([f"  • {k}: ${v:,.0f}" for k, v in targets.items()])
-            targets_section = f'\n<b>🎯 Targets:</b>\n{targets_text}'
-        
-        # Market context
-        context = report.get('market_context', {})
-        context_section = ''
-        if context:
-            context_items = []
-            if context.get('quantum_state'):
-                context_items.append(f"⚛️ {context.get('quantum_state')}")
-            if context.get('vp_shape'):
-                context_items.append(f"📊 {context.get('vp_shape')}")
-            if context.get('fear_greed'):
-                context_items.append(f"😱 F&G: {context.get('fear_greed')}")
-            if context_items:
-                context_section = f"\n<b>🌍 Contexte:</b> {' | '.join(context_items)}"
-        
+        # ========== MESSAGE FINAL ==========
         message = f"""{direction_emoji} <b>SIGNAL BTC - {signal_type}</b>
 
 <b>💰 Prix:</b> ${price:,.2f}
 <b>📊 Confiance:</b> {confidence:.0f}/100
-<b>📈 Direction:</b> {direction}
-<b>⏰ Heure:</b> {timestamp}
+<b>📈 Direction:</b> {dir_text}
+<b>⏰</b> {timestamp}{consecutive_section}
+{context_section}
+{targets_section}
+{reasons_section}{warnings_section}
 
-<b>📊 Scores:</b>
-{scores_text}{context_section}{reasons_section}{targets_section}{warnings_section}
+<code>🏦 {exchanges_connected}/12 exchanges | VWAP ${vwap:,.0f}</code>
 
 <i>#BTC #Signal #{signal_type}</i>"""
         
         return self.send_message(message.strip())
+    
+    def _count_consecutive_signals(self, history: list, current_direction: str) -> int:
+        """Compte les signaux consécutifs dans la même direction"""
+        if not history or current_direction == 'NEUTRAL':
+            return 1
+        
+        count = 1
+        for sig in reversed(history):
+            sig_dir = sig.get('signal', {}).get('direction', 'NEUTRAL')
+            # Normaliser les directions
+            if sig_dir in ['LONG', 'BULLISH']:
+                sig_dir = 'LONG'
+            elif sig_dir in ['SHORT', 'BEARISH']:
+                sig_dir = 'SHORT'
+            else:
+                sig_dir = 'NEUTRAL'
+            
+            if sig_dir == current_direction:
+                count += 1
+            else:
+                break
+        return count
+    
+    def _get_french_ordinal(self, n: int) -> str:
+        """Convertit un nombre en ordinal français"""
+        if n == 1:
+            return "1er"
+        elif n == 2:
+            return "2ème"
+        elif n == 3:
+            return "3ème"
+        else:
+            return f"{n}ème"
     
     def send_daily_summary(self, reports: list) -> bool:
         """Envoie un résumé quotidien"""
