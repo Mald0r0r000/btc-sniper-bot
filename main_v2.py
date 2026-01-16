@@ -58,7 +58,7 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     # Multi-exchange aggregator
     if mode == 'full':
         try:
-            multi_agg = MultiExchangeAggregator(['binance', 'okx', 'bybit', 'bitget'])
+            multi_agg = MultiExchangeAggregator()  # Uses default 9 exchanges with fallback
             multi_exchange_data = multi_agg.get_aggregated_data()
             print(f"   ✅ {multi_exchange_data.get('exchanges_connected', 0)} exchanges connectés")
         except Exception as e:

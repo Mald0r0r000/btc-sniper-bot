@@ -38,7 +38,14 @@ class ExchangeConnection:
             'binance': 'BTC/USDT:USDT',
             'okx': 'BTC/USDT:USDT',
             'bybit': 'BTC/USDT:USDT',
-            'bitget': 'BTC/USDT:USDT'
+            'bitget': 'BTC/USDT:USDT',
+            # Exchanges US-friendly (fallback)
+            'mexc': 'BTC/USDT:USDT',
+            'gateio': 'BTC/USDT:USDT',
+            'phemex': 'BTC/USDT:USDT',
+            'bitmex': 'BTC/USDT:USDT',
+            # DEX (pas de géoblocage)
+            'hyperliquid': 'BTC/USDC:USDC'
         }
         self.symbol = self.symbol_map.get(exchange_id, 'BTC/USDT:USDT')
     
@@ -126,11 +133,23 @@ class MultiExchangeAggregator:
     """
     
     # Poids de volume approximatifs par exchange (basé sur volume réel)
+    # Tier 1: Gros volumes (Binance, OKX, Bybit)
+    # Tier 2: Volumes moyens (Bitget, MEXC, Gate.io)
+    # Tier 3: Volumes plus faibles (Phemex, BitMEX)
     BASE_WEIGHTS = {
-        'binance': 0.55,
-        'okx': 0.18,
-        'bybit': 0.15,
-        'bitget': 0.12
+        # Tier 1 - Majeurs (géobloqués sur GitHub Actions)
+        'binance': 0.30,
+        'okx': 0.15,
+        'bybit': 0.12,
+        # Tier 2 - Secondaires
+        'bitget': 0.12,
+        'mexc': 0.10,
+        'gateio': 0.08,
+        # Tier 3 - Fallback US-friendly
+        'phemex': 0.06,
+        'bitmex': 0.05,
+        # DEX - Pas de géoblocage, gros volumes
+        'hyperliquid': 0.08
     }
     
     # Erreurs indiquant un géoblocage
@@ -147,10 +166,15 @@ class MultiExchangeAggregator:
         """
         Args:
             exchanges: Liste des exchanges à utiliser. 
-                      Par défaut: ['binance', 'okx', 'bybit', 'bitget']
+                      Par défaut: 8 exchanges (majeurs + fallback US-friendly)
         """
         if exchanges is None:
-            exchanges = ['binance', 'okx', 'bybit', 'bitget']
+            # Inclure les exchanges US-friendly comme fallback
+            exchanges = [
+                'binance', 'okx', 'bybit', 'bitget',  # Tier 1-2 (peuvent être géobloqués)
+                'mexc', 'gateio', 'phemex', 'bitmex',  # Fallback US-friendly
+                'hyperliquid'  # DEX - jamais géobloqué
+            ]
         
         self.requested_exchanges = exchanges
         self.exchanges = {}
