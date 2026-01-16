@@ -42,9 +42,12 @@ class ExchangeConnection:
             'bitget': 'BTC/USDT:USDT',
             # Exchanges US-friendly (fallback)
             'mexc': 'BTC/USDT:USDT',
-            'gateio': 'BTC/USDT:USDT',
             'phemex': 'BTC/USDT:USDT',
             'bitmex': 'BTC/USDT:USDT',
+            # Exchanges US-friendly (Premium Fallback)
+            'kraken': 'BTC/USD',
+            'coinbase': 'BTC/USD',
+            'binanceus': 'BTC/USDT',
             # DEX (pas de géoblocage)
             'hyperliquid': 'BTC/USDC:USDC'
         }
@@ -147,8 +150,12 @@ class MultiExchangeAggregator:
         'mexc': 0.10,
         'gateio': 0.08,
         # Tier 3 - Fallback US-friendly
-        'phemex': 0.06,
-        'bitmex': 0.05,
+        'phemex': 0.05,
+        'bitmex': 0.04,
+        # US Friendly Replacements (compensent la perte de Binance/Bybit)
+        'kraken': 0.10,
+        'coinbase': 0.08,
+        'binanceus': 0.02,
         # DEX - Pas de géoblocage, gros volumes
         'hyperliquid': 0.08
     }
@@ -174,6 +181,7 @@ class MultiExchangeAggregator:
             exchanges = [
                 'binance', 'okx', 'bybit', 'bitget',  # Tier 1-2 (peuvent être géobloqués)
                 'mexc', 'gateio', 'phemex', 'bitmex',  # Fallback US-friendly
+                'kraken', 'coinbase', 'binanceus', # US Friendly Premium
                 'hyperliquid'  # DEX - jamais géobloqué
             ]
         
@@ -290,6 +298,13 @@ class MultiExchangeAggregator:
         self._recalculate_weights(available_exchanges)
         
         # Log status
+        connected_list = available_exchanges
+        failed_list = [ex for ex in self.requested_exchanges if ex not in available_exchanges]
+        
+        print(f"   ✅ {len(available_exchanges)} exchanges connectés: {', '.join(connected_list)}")
+        if failed_list:
+            print(f"   ❌ {len(failed_list)} échecs: {', '.join(failed_list)}")
+            
         failed_now = [ex for ex in self.exchanges if ex not in available_exchanges]
         if failed_now:
             for ex in failed_now:
