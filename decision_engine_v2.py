@@ -138,6 +138,9 @@ class DecisionEngineV2:
         }
     }
     
+    # Chemin du fichier de poids adaptatifs
+    ADAPTIVE_WEIGHTS_FILE = 'adaptive_weights.json'
+    
     # Seuils de confiance
     CONFIDENCE_THRESHOLDS = {
         'STRONG': 80,
@@ -187,10 +190,14 @@ class DecisionEngineV2:
         self.consistency_bonus = consistency_bonus
         
         # Sélectionner les poids selon le style
-        self.WEIGHT_CONFIG = self.WEIGHT_CONFIGS.get(
-            trading_style, 
-            self.WEIGHT_CONFIGS['default']
-        )
+        if trading_style == 'adaptive':
+            # Charger les poids adaptatifs depuis le fichier JSON
+            self.WEIGHT_CONFIG = self._load_adaptive_weights()
+        else:
+            self.WEIGHT_CONFIG = self.WEIGHT_CONFIGS.get(
+                trading_style, 
+                self.WEIGHT_CONFIGS['default']
+            )
         
         # Core data
         self.ob = order_book_data or {}
@@ -219,6 +226,28 @@ class DecisionEngineV2:
         # Fluid Dynamics data
         self.venturi = venturi_data or {}
         self.self_trading = self_trading_data or {}
+    
+    def _load_adaptive_weights(self) -> Dict[str, int]:
+        """
+        Charge les poids adaptatifs depuis un fichier JSON
+        Fallback sur les poids par défaut si le fichier n'existe pas
+        """
+        import json
+        import os
+        
+        try:
+            if os.path.exists(self.ADAPTIVE_WEIGHTS_FILE):
+                with open(self.ADAPTIVE_WEIGHTS_FILE, 'r') as f:
+                    data = json.load(f)
+                    weights = data.get('weights', {})
+                    if weights:
+                        print(f"   🧠 Poids adaptatifs chargés: {weights}")
+                        return weights
+        except Exception as e:
+            print(f"   ⚠️ Erreur chargement poids adaptatifs: {e}")
+        
+        # Fallback
+        return self.WEIGHT_CONFIGS['default']
     
     def generate_composite_signal(self) -> Dict[str, Any]:
         """

@@ -12,6 +12,8 @@ from typing import Dict, Any
 from main_v2 import run_analysis_v2
 from notifier import TelegramNotifier
 from data_store import GistDataStore
+from signal_validator import SignalValidator
+from adaptive_scoring import AdaptiveScoringLayer
 
 
 def run_scheduled_analysis() -> Dict[str, Any]:
@@ -156,8 +158,22 @@ def main():
         success = test_telegram()
         sys.exit(0 if success else 1)
     
+    # Mode validation uniquement
+    if len(sys.argv) > 1 and sys.argv[1] == '--validate':
+        print("🔍 Mode validation des signaux")
+        data_store = GistDataStore()
+        result = run_validation_cycle(data_store)
+        print(f"Résultat: {result}")
+        sys.exit(0)
+    
     # Exécuter l'analyse
     report = run_scheduled_analysis()
+    
+    # Vérifier si on doit valider (toutes les 6 runs = ~30min)
+    run_number = int(os.getenv('GITHUB_RUN_NUMBER', '0'))
+    if run_number > 0 and run_number % 6 == 0:
+        data_store = GistDataStore()
+        run_validation_cycle(data_store)
     
     if report:
         print("\n✅ Analyse terminée avec succès")
@@ -167,5 +183,55 @@ def main():
         sys.exit(1)
 
 
+def run_validation_cycle(data_store: GistDataStore) -> Dict[str, Any]:
+    """
+    Exécute la validation des signaux passés et recalibre les poids
+    """
+    print("\n" + "=" * 60)
+    print("🔍 VALIDATION & RECALIBRATION")
+    print("=" * 60)
+    
+    # Récupérer les signaux non-validés
+    signals = data_store.read_signals()
+    pending = [s for s in signals if s.get('validation', {}).get('status') not in ['WIN', 'LOSS', 'EXPIRED']]
+    
+    print(f"⏳ {len(pending)} signaux à valider")
+    
+    if not pending:
+        print("✅ Aucun signal à valider")
+        return {'validated': 0}
+    
+    # Valider les signaux
+    validator = SignalValidator()
+    validated_signals, performance = validator.run_validation(pending)
+    
+    # Recalibrer les poids si on a assez de données
+    decided_signals = [s for s in validated_signals if s.get('validation', {}).get('status') in ['WIN', 'LOSS']]
+    
+    if len(decided_signals) >= 10:
+        print("\n🧠 Recalibration des poids...")
+        scorer = AdaptiveScoringLayer()
+        scorer.analyze_signals(decided_signals)
+        new_weights = scorer.calculate_adjusted_weights()
+        
+        # Sauvegarder les nouveaux poids
+        import json
+        with open('adaptive_weights.json', 'w') as f:
+            json.dump({
+                'updated_at': datetime.now(timezone.utc).isoformat(),
+                'weights': new_weights,
+                'performance': performance
+            }, f, indent=2)
+        print(f"   ✅ Poids mis à jour: {new_weights}")
+    else:
+        print(f"   ⏳ Pas assez de données ({len(decided_signals)}/10 requis)")
+    
+    return {
+        'validated': len(validated_signals),
+        'performance': performance
+    }
+
+
 if __name__ == "__main__":
     main()
+

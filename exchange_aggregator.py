@@ -117,15 +117,31 @@ class ExchangeConnection:
 
 
 class MultiExchangeAggregator:
-    """Agrégateur multi-exchange pour vision globale du marché"""
+    """Agrégateur multi-exchange pour vision globale du marché
     
-    # Poids de volume approximatifs par exchange
-    VOLUME_WEIGHTS = {
+    Features:
+    - Fallback automatique si exchange indisponible (ex: Binance géobloqué)
+    - Recalcul dynamique des poids basé sur exchanges disponibles
+    - Logging détaillé des connexions
+    """
+    
+    # Poids de volume approximatifs par exchange (basé sur volume réel)
+    BASE_WEIGHTS = {
         'binance': 0.55,
         'okx': 0.18,
         'bybit': 0.15,
         'bitget': 0.12
     }
+    
+    # Erreurs indiquant un géoblocage
+    GEOBLOCK_ERRORS = [
+        'Service unavailable',
+        'IP has been restricted',
+        'forbidden',
+        '403',
+        'not available in your region',
+        'restricted location'
+    ]
     
     def __init__(self, exchanges: List[str] = None):
         """
@@ -136,7 +152,11 @@ class MultiExchangeAggregator:
         if exchanges is None:
             exchanges = ['binance', 'okx', 'bybit', 'bitget']
         
+        self.requested_exchanges = exchanges
         self.exchanges = {}
+        self.failed_exchanges = {}  # Track failed exchanges and reasons
+        self.dynamic_weights = {}   # Weights recalculated based on availability
+        
         for ex_id in exchanges:
             try:
                 # Pour Bitget, on utilise les clés API si disponibles
@@ -150,7 +170,56 @@ class MultiExchangeAggregator:
                 else:
                     self.exchanges[ex_id] = ExchangeConnection(ex_id)
             except Exception as e:
-                print(f"⚠️ Impossible de connecter {ex_id}: {e}")
+                error_msg = str(e).lower()
+                is_geoblock = any(geo in error_msg for geo in self.GEOBLOCK_ERRORS)
+                self.failed_exchanges[ex_id] = {
+                    'error': str(e),
+                    'is_geoblock': is_geoblock
+                }
+                if is_geoblock:
+                    print(f"   🌍 {ex_id.upper()} géobloqué (IP restriction)")
+                else:
+                    print(f"   ⚠️ Impossible de connecter {ex_id}: {e}")
+        
+        # Calculer les poids dynamiques
+        self._recalculate_weights()
+    
+    def _recalculate_weights(self, available_exchanges: List[str] = None) -> Dict[str, float]:
+        """
+        Recalcule les poids basé sur les exchanges disponibles
+        Normalise à 100% pour les exchanges actifs
+        """
+        if available_exchanges is None:
+            available_exchanges = list(self.exchanges.keys())
+        
+        if not available_exchanges:
+            return {}
+        
+        # Filtrer les poids pour les exchanges disponibles
+        available_weights = {
+            k: v for k, v in self.BASE_WEIGHTS.items() 
+            if k in available_exchanges
+        }
+        
+        # Normaliser à 100%
+        total = sum(available_weights.values())
+        if total > 0:
+            self.dynamic_weights = {k: v/total for k, v in available_weights.items()}
+        else:
+            # Fallback: poids égaux
+            self.dynamic_weights = {k: 1.0/len(available_exchanges) for k in available_exchanges}
+        
+        return self.dynamic_weights
+    
+    def get_connection_status(self) -> Dict[str, Any]:
+        """Retourne le statut de connexion aux exchanges"""
+        return {
+            'requested': self.requested_exchanges,
+            'connected': list(self.exchanges.keys()),
+            'failed': self.failed_exchanges,
+            'weights': self.dynamic_weights,
+            'data_quality': len(self.exchanges) / len(self.requested_exchanges) * 100
+        }
     
     def _parallel_fetch(self, method_name: str, **kwargs) -> Dict[str, Dict]:
         """Exécute une méthode en parallèle sur tous les exchanges"""
@@ -186,10 +255,38 @@ class MultiExchangeAggregator:
         funding_rates = self._parallel_fetch('fetch_funding_rate')
         open_interests = self._parallel_fetch('fetch_open_interest')
         
+        # Identifier les exchanges avec données valides
+        available_exchanges = [
+            ex_id for ex_id, ticker in tickers.items() 
+            if ticker.get('success')
+        ]
+        
+        # Mettre à jour les poids dynamiques
+        self._recalculate_weights(available_exchanges)
+        
+        # Log status
+        failed_now = [ex for ex in self.exchanges if ex not in available_exchanges]
+        if failed_now:
+            for ex in failed_now:
+                error = tickers.get(ex, {}).get('error', 'Unknown')
+                is_geoblock = any(geo in str(error).lower() for geo in self.GEOBLOCK_ERRORS)
+                if is_geoblock:
+                    print(f"   🌍 {ex.upper()} géobloqué - poids redistribués")
+                else:
+                    print(f"   ⚠️ {ex.upper()} indisponible: {error[:50]}")
+        
+        if len(available_exchanges) < len(self.exchanges):
+            print(f"   📊 Poids recalculés: {', '.join(f'{k}:{v:.0%}' for k,v in self.dynamic_weights.items())}")
+        
         # Agrégation
         result = {
             'timestamp': datetime.now(timezone.utc).isoformat(),
-            'exchanges_connected': len([r for r in tickers.values() if r.get('success')]),
+            'exchanges_connected': len(available_exchanges),
+            'exchanges_requested': len(self.requested_exchanges),
+            'exchanges_available': available_exchanges,
+            'exchanges_failed': failed_now,
+            'dynamic_weights': self.dynamic_weights,
+            'data_quality_pct': round(len(available_exchanges) / len(self.requested_exchanges) * 100, 1),
             'global_orderbook': self._aggregate_orderbooks(order_books),
             'price_analysis': self._analyze_prices(tickers),
             'funding_analysis': self._analyze_funding(funding_rates),
@@ -216,7 +313,7 @@ class MultiExchangeAggregator:
             if not ob.get('success'):
                 continue
             
-            weight = self.VOLUME_WEIGHTS.get(ex_id, 0.1)
+            weight = self.dynamic_weights.get(ex_id, 0.1)
             
             for bid in ob.get('bids', [])[:30]:
                 all_bids.append({
