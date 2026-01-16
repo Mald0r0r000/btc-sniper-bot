@@ -25,7 +25,8 @@ from analyzers import (
     OptionsAnalyzer,
     OpenInterestAnalyzer,
     SelfTradingDetector,
-    VenturiAnalyzer
+    VenturiAnalyzer,
+    HyperliquidAnalyzer
 )
 from decision_engine_v2 import DecisionEngineV2
 
@@ -272,6 +273,17 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
                 print(f"   🌊 Venturi: Marché fluide")
         except Exception as e:
             print(f"   ⚠️ Venturi analysis failed: {e}")
+        
+        # Hyperliquid Advanced Analysis (R&D)
+        hyperliquid_result = {}
+        try:
+            hl_analyzer = HyperliquidAnalyzer()
+            hyperliquid_result = hl_analyzer.analyze()
+            market = hyperliquid_result.get('market', {})
+            whale = hyperliquid_result.get('whale_analysis', {})
+            print(f"   🔷 Hyperliquid: OI {market.get('open_interest_btc', 0):,.0f} BTC | Whales {whale.get('sentiment', 'NEUTRAL')}")
+        except Exception as e:
+            print(f"   ⚠️ Hyperliquid analysis failed: {e}")
     
     # ==========================================
     # 5. DECISION ENGINE V2
@@ -401,7 +413,8 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
             'fluid_dynamics': {
                 'venturi': venturi_result if venturi_result else None,
                 'self_trading': self_trading_result if self_trading_result else None
-            }
+            },
+            'hyperliquid': hyperliquid_result if hyperliquid_result else None
         }
     }
     

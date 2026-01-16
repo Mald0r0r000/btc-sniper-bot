@@ -26,6 +26,9 @@ from .fluid_dynamics import SelfTradingDetector, VenturiAnalyzer
 # Liquidation Zones (R&D)
 from .liquidation_zones import LiquidationZoneAnalyzer
 
+# Hyperliquid Advanced (R&D)
+from .hyperliquid_analyzer import HyperliquidAnalyzer
+
 __all__ = [
     # Core analyzers
     'OrderBookAnalyzer',
@@ -55,6 +58,9 @@ __all__ = [
     'VenturiAnalyzer',
     
     # Liquidation Zones (R&D)
-    'LiquidationZoneAnalyzer'
+    'LiquidationZoneAnalyzer',
+    
+    # Hyperliquid (R&D)
+    'HyperliquidAnalyzer'
 ]
 
