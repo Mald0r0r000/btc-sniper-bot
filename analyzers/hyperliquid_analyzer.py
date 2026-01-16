@@ -27,14 +27,39 @@ class HyperliquidAnalyzer:
     
     BASE_URL = "https://api.hyperliquid.xyz/info"
     
-    # Adresses connues de gros comptes Hyperliquid (publiques)
-    # Ces adresses sont visibles publiquement sur la blockchain
+    # Adresses connues de gros comptes Hyperliquid avec bon winrate
+    # Source: données utilisateur vérifiées
     WHALE_ADDRESSES = [
-        "0xBa5ED108dB53b5E7075F7E7dAEC16a7fA9E739D8",  # Top trader
-        "0x9A5BC9B873522268F965e1e6D029024b10d0Df77",  # Market maker
-        "0x4f8C9271C3e22F462F76E3D9e1f3D8668C02fb16",  # Whale
-        "0x9531C059098e3d194fF87FebB587aB07B30b1306",  # Instituional
-        "0x7E5F4552091A69125d5DfCb7b8C2659029395Bdf",  # Fund
+        # Tier 1 - Top Whales
+        "0xb83de012dba672c76a7dbbbf3e459cb59d7d6e36",
+        "0xb317d2bc2d3d2df5fa441b5bae0ab9d8b07283ae",
+        "0xc2a30212a8ddac9e123944d6e29faddce994e5f2",
+        "0x4f9a37bc2a4a2861682c0e9be1f9417df03cc27c",
+        "0x2ea18c23f72a4b6172c55b411823cdc5335923f4",
+        "0x3e10864b0efa14994c350ed247c815966a8fd962",
+        "0x3e10d813db3374877e2074cb8126066ca7dad962",
+        "0x952044eb3c860b00778ea414670a6c8c22f84ac6",
+        "0x99E1E710fAf2EA090E5cFA5A600c1478031640be",
+        "0xEe7aE85f2Fe2239E27D9c1E23fFFe168D63b4055",
+        # Tier 2 - High Winrate Traders
+        "0xa5b0edf6b55128e0ddae8e51ac538c3188401d41",
+        "0x9c89f595f5515609ad61f6fda94beff85ae6600e",
+        "0x3c363e96d22c056d748f199fb728fc80d70e461a",
+        "0xc26cbb6483229e0d0f9a1cab675271eda535b8f4",
+        "0x175e7023e8dc93d0c044852685ac33e856b577b4",
+        "0x0e41eb80e9a39ae7b887a94f6a88f6c791e26359",
+        "0x0ddf9bae2af4b874b96d287a5ad42eb47138a902",
+        "0xf97ad6704baec104d00b88e0c157e2b7b3a1ddd1",
+        "0xefffa330cbae8d916ad1d33f0eeb16cfa711fa91",
+        "0x6f1d35664eab0efa5a796091c28d14f1472d3162",
+        "0xe0665019fcf5ffa4a5aea5cf65f84016fcbe78da",
+        "0x4b66f4048a0a90fd5ff44abbe5d68332656b78b8",
+        "0xa4add8273d7f47318675bdfbcce3e9648cdb4509",
+        "0xfd97600ac44b3c4e20ac1a5f23e3b18d10fa5912",
+        "0x7583b5364597736a6a72c4ba61ede0a4a37ef4de",
+        "0x06cecfbac34101ae41c88ebc2450f8602b3d164b",
+        "0x41206f8efb51e5039e5b46e04e7866a4849f72d2",
+        "0x7fdafde5cfb5465924316eced2d3715494c517d1",
     ]
     
     def __init__(self):
