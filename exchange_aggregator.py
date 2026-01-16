@@ -22,7 +22,8 @@ class ExchangeConnection:
         
         exchange_config = {
             'enableRateLimit': True,
-            'options': {'defaultType': 'swap'}
+            'options': {'defaultType': 'swap'},
+            'timeout': 15000  # 15s timeout par requête
         }
         
         if api_key:
@@ -249,13 +250,13 @@ class MultiExchangeAggregator:
         """Exécute une méthode en parallèle sur tous les exchanges"""
         results = {}
         
-        with ThreadPoolExecutor(max_workers=4) as executor:
+        with ThreadPoolExecutor(max_workers=10) as executor:
             futures = {}
             for ex_id, connection in self.exchanges.items():
                 method = getattr(connection, method_name)
                 futures[executor.submit(method, **kwargs)] = ex_id
             
-            for future in as_completed(futures, timeout=10):
+            for future in as_completed(futures, timeout=20):
                 ex_id = futures[future]
                 try:
                     results[ex_id] = future.result()
