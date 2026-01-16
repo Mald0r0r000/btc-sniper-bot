@@ -197,6 +197,88 @@ class GistDataStore:
             "avg_confidence": round(avg_confidence, 1),
             "high_confidence_count": len([c for c in confidences if c >= 60])
         }
+    
+    # ========== ADAPTIVE WEIGHTS PERSISTENCE ==========
+    
+    WEIGHTS_FILENAME = "adaptive_weights.json"
+    
+    def save_adaptive_weights(self, weights_data: Dict[str, Any]) -> bool:
+        """
+        Sauvegarde les poids adaptatifs dans le Gist
+        Permet la persistance entre les runs GitHub Actions
+        """
+        if not self.github_token or not self.gist_id:
+            return False
+        
+        try:
+            # Lire le gist actuel pour obtenir tous les fichiers
+            response = requests.get(
+                f"{self.api_base}/gists/{self.gist_id}",
+                headers=self._headers(),
+                timeout=15
+            )
+            
+            if not response.ok:
+                print(f"⚠️ Erreur lecture Gist: {response.status_code}")
+                return False
+            
+            # Mettre à jour avec le nouveau fichier de poids
+            update_response = requests.patch(
+                f"{self.api_base}/gists/{self.gist_id}",
+                headers=self._headers(),
+                json={
+                    "files": {
+                        self.WEIGHTS_FILENAME: {
+                            "content": json.dumps(weights_data, indent=2)
+                        }
+                    }
+                },
+                timeout=15
+            )
+            
+            if update_response.ok:
+                print(f"   ✅ Poids adaptatifs sauvegardés dans le Gist")
+                return True
+            else:
+                print(f"⚠️ Erreur sauvegarde poids: {update_response.status_code}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Erreur sauvegarde poids adaptatifs: {e}")
+            return False
+    
+    def load_adaptive_weights(self) -> Optional[Dict[str, Any]]:
+        """
+        Charge les poids adaptatifs depuis le Gist
+        Utilisé au démarrage pour récupérer les poids persistés
+        """
+        if not self.github_token or not self.gist_id:
+            return None
+        
+        try:
+            response = requests.get(
+                f"{self.api_base}/gists/{self.gist_id}",
+                headers=self._headers(),
+                timeout=15
+            )
+            
+            if response.ok:
+                gist_data = response.json()
+                files = gist_data.get("files", {})
+                
+                if self.WEIGHTS_FILENAME in files:
+                    content = files[self.WEIGHTS_FILENAME]["content"]
+                    weights_data = json.loads(content)
+                    print(f"   🧠 Poids adaptatifs chargés depuis le Gist")
+                    return weights_data
+                else:
+                    return None
+            else:
+                return None
+                
+        except Exception as e:
+            print(f"⚠️ Erreur chargement poids adaptatifs: {e}")
+            return None
 
 
 def test_gist_store():

@@ -208,23 +208,30 @@ def run_validation_cycle(data_store: GistDataStore) -> Dict[str, Any]:
     # Recalibrer les poids si on a assez de données
     decided_signals = [s for s in validated_signals if s.get('validation', {}).get('status') in ['WIN', 'LOSS']]
     
-    if len(decided_signals) >= 10:
+    if len(decided_signals) >= 5:
         print("\n🧠 Recalibration des poids...")
         scorer = AdaptiveScoringLayer()
         scorer.analyze_signals(decided_signals)
         new_weights = scorer.calculate_adjusted_weights()
         
-        # Sauvegarder les nouveaux poids
+        # Préparer les données de poids
         import json
+        weights_data = {
+            'updated_at': datetime.now(timezone.utc).isoformat(),
+            'weights': new_weights,
+            'performance': performance
+        }
+        
+        # Sauvegarder localement (pour les tests)
         with open('adaptive_weights.json', 'w') as f:
-            json.dump({
-                'updated_at': datetime.now(timezone.utc).isoformat(),
-                'weights': new_weights,
-                'performance': performance
-            }, f, indent=2)
+            json.dump(weights_data, f, indent=2)
+        
+        # Sauvegarder dans le Gist (pour GitHub Actions)
+        data_store.save_adaptive_weights(weights_data)
+        
         print(f"   ✅ Poids mis à jour: {new_weights}")
     else:
-        print(f"   ⏳ Pas assez de données ({len(decided_signals)}/10 requis)")
+        print(f"   ⏳ Pas assez de données ({len(decided_signals)}/5 requis)")
     
     return {
         'validated': len(validated_signals),

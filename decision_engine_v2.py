@@ -234,24 +234,41 @@ class DecisionEngineV2:
     
     def _load_adaptive_weights(self) -> Dict[str, int]:
         """
-        Charge les poids adaptatifs depuis un fichier JSON
-        Fallback sur les poids par défaut si le fichier n'existe pas
+        Charge les poids adaptatifs depuis un fichier JSON ou le Gist
+        Priorité: 1) Fichier local  2) Gist  3) Poids par défaut
         """
         import json
         import os
         
+        # 1. Essayer le fichier local d'abord
         try:
             if os.path.exists(self.ADAPTIVE_WEIGHTS_FILE):
                 with open(self.ADAPTIVE_WEIGHTS_FILE, 'r') as f:
                     data = json.load(f)
                     weights = data.get('weights', {})
                     if weights:
-                        print(f"   🧠 Poids adaptatifs chargés: {weights}")
+                        print(f"   🧠 Poids adaptatifs chargés (local): {weights}")
                         return weights
         except Exception as e:
-            print(f"   ⚠️ Erreur chargement poids adaptatifs: {e}")
+            print(f"   ⚠️ Erreur chargement poids locaux: {e}")
         
-        # Fallback
+        # 2. Essayer le Gist (pour GitHub Actions)
+        try:
+            from data_store import GistDataStore
+            gist_store = GistDataStore()
+            gist_data = gist_store.load_adaptive_weights()
+            if gist_data and gist_data.get('weights'):
+                weights = gist_data['weights']
+                print(f"   🧠 Poids adaptatifs chargés (Gist): {weights}")
+                # Sauvegarder localement pour le prochain accès
+                with open(self.ADAPTIVE_WEIGHTS_FILE, 'w') as f:
+                    json.dump(gist_data, f, indent=2)
+                return weights
+        except Exception as e:
+            print(f"   ⚠️ Erreur chargement poids Gist: {e}")
+        
+        # 3. Fallback sur poids par défaut
+        print("   📊 Utilisation des poids par défaut")
         return self.WEIGHT_CONFIGS['default']
     
     def generate_composite_signal(self) -> Dict[str, Any]:
