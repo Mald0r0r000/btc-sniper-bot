@@ -29,6 +29,7 @@ from analyzers import (
     HyperliquidAnalyzer
 )
 from decision_engine_v2 import DecisionEngineV2
+from consistency_checker import ConsistencyChecker
 
 
 def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
@@ -150,6 +151,9 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     sentiment_result = {}
     macro_result = {}
     options_result = {}
+    venturi_result = {}
+    self_trading_result = {}
+    hyperliquid_result = {}
     
     if mode == 'full':
         print("\n🔬 Analyse des indicateurs avancés...")
@@ -307,6 +311,10 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     # ==========================================
     print("\n🧠 Génération du signal composite...")
     
+    # Consistency data will be empty for now - the notifier handles full consistency
+    # The quality filters in DecisionEngineV2 will use defaults when empty
+    consistency_data = {}
+    
     engine = DecisionEngineV2(
         current_price=current_price,
         order_book_data=ob_result,
@@ -323,6 +331,7 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         open_interest=oi_data,
         options_data=options_result,
         trading_style='adaptive',  # Utilise les poids calibrés sur le winrate historique
+        consistency_data=consistency_data,  # For quality filters
         candles_5m=candles_5m,  # Pour les zones de liquidation
         candles_1h=candles_1h,  # Pour Smart Entry (Robustesse)
         venturi_data=venturi_result,  # Fluid dynamics - Venturi

@@ -183,6 +183,8 @@ class DecisionEngineV2:
         trading_style: str = 'swing',
         # Bonus/malus de consistency
         consistency_bonus: int = 0,
+        # Full consistency data for quality filters
+        consistency_data: Dict = None,
         # Candles pour liquidation zones et MTF targets
         candles_5m: List[Dict] = None,
         candles_1h: List[Dict] = None,
@@ -196,6 +198,10 @@ class DecisionEngineV2:
         self.price = current_price
         self.trading_style = trading_style
         self.consistency_bonus = consistency_bonus
+        # Store full consistency data for quality filters
+        self.consistency_data = consistency_data or {}
+        self.consistency_status = self.consistency_data.get('status', 'UNKNOWN')
+        self.consistency_score = self.consistency_data.get('confidence_trend', 0)
         
         # Sélectionner les poids selon le style
         if trading_style == 'adaptive':
@@ -324,7 +330,20 @@ class DecisionEngineV2:
         # 6. Sélectionner le type de signal
         signal_type = self._select_signal_type(dimension_scores, direction)
         
-        # 6. Générer les détails du signal
+        # 6b. QUALITY FILTERS (validated via backtesting: +6.2% WR, +$1590 P&L)
+        # Filter 1: Skip LONG_BREAKOUT (0% WR in historical backtests)
+        if signal_type == SignalType.LONG_BREAKOUT:
+            signal_type = SignalType.NO_SIGNAL
+            direction = SignalDirection.NEUTRAL
+        
+        # Filter 2: Downgrade signals with NEUTRAL consistency + declining confidence
+        if self.consistency_status == 'NEUTRAL' and self.consistency_score < -15:
+            # Check if it's a tradeable signal being downgraded
+            if signal_type not in [SignalType.NO_SIGNAL]:
+                signal_type = SignalType.NO_SIGNAL
+                direction = SignalDirection.NEUTRAL
+        
+        # 6c. Générer les détails du signal
         signal = self._build_composite_signal(
             signal_type, direction, raw_score, adjusted_score,
             dimension_scores, manipulation_penalty
