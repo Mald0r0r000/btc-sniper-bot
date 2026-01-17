@@ -269,14 +269,14 @@ class HistoricalSignalBacktester:
             
             
             # --- R&D: SMART ENTRY (Optimized) ---
-            # Simulate Smart Entry using Structure
+            # Simulate Smart Entry using Structure (Reverted to 1h for robustness/selectivity)
             smart_entry = self.smart_entry_analyzer.analyze(
                 direction=direction,
                 current_price=signal['price'],
                 original_tp1=tp1,
                 original_tp2=tp2,
                 original_sl=sl,
-                candles=candles_5m_recent # Use 5m for finer entry structure
+                candles=candles_1h_recent # Back to 1h for robust structure analysis
             )
             
             actual_entry_price = signal['price']
@@ -284,7 +284,7 @@ class HistoricalSignalBacktester:
             
             # Logic for WAIT_DIP / LIMIT_ORDER
             if smart_entry.strategy in [EntryStrategy.WAIT_FOR_DIP, EntryStrategy.LIMIT_ORDER]:
-                # Look ahead 4h using 5m candles for precision
+                # Look ahead 4h using 5m candles for precision execution check
                 timeout_candles = 4 * 12 # 4 hours * 12 (5m candles)
                 future_candles = ohlcv_5m[entry_idx_5m:entry_idx_5m+timeout_candles]
                 
