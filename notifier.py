@@ -52,13 +52,14 @@ class TelegramNotifier:
             print(f"❌ Erreur Telegram: {e}")
             return False
     
-    def send_signal_alert(self, report: Dict[str, Any], signal_history: list = None) -> bool:
+    def send_signal_alert(self, report: Dict[str, Any], signal_history: list = None, winrate_stats: Dict = None) -> bool:
         """
         Envoie une alerte enrichie pour un signal de trading
         
         Args:
             report: Le rapport d'analyse complet
             signal_history: Historique des signaux pour compter les consécutifs
+            winrate_stats: Statistiques de performance (winrate, wins, losses)
         """
         signal = report.get('signal', {})
         confidence = signal.get('confidence', 0)
@@ -180,6 +181,15 @@ class TelegramNotifier:
             warnings_text = '\n'.join([f"  ⚠️ {w}" for w in warnings[:2]])
             warnings_section = f'\n{warnings_text}'
         
+        # ========== WINRATE STATS ==========
+        winrate_section = ''
+        if winrate_stats:
+            wr = winrate_stats.get('winrate_pct', 0)
+            wins = winrate_stats.get('wins', 0)
+            losses = winrate_stats.get('losses', 0)
+            if wins + losses > 0:
+                winrate_section = f" | 📊 WR: {wr:.0f}% ({wins}W/{losses}L)"
+        
         # ========== MESSAGE FINAL ==========
         message = f"""{direction_emoji} <b>SIGNAL BTC - {signal_type}</b>
 
@@ -191,7 +201,7 @@ class TelegramNotifier:
 {targets_section}
 {reasons_section}{warnings_section}
 
-<code>🏦 {exchanges_connected}/12 exchanges | VWAP ${vwap:,.0f}</code>
+<code>🏦 {exchanges_connected}/12 | VWAP ${vwap:,.0f}{winrate_section}</code>
 
 <i>#BTC #Signal #{signal_type}</i>"""
         

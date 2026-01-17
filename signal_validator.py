@@ -91,12 +91,19 @@ class SignalValidator:
         targets = signal_data.get('targets', {})
         price_at_signal = signal.get('price', 0)
         
-        if direction == 'NEUTRAL' or not targets:
-            return {'status': 'SKIP', 'reason': 'No direction or targets'}
-        
         tp1 = targets.get('tp1', 0)
         tp2 = targets.get('tp2', 0)
         sl = targets.get('sl', 0)
+        
+        # Si direction NEUTRAL mais TP définis, déduire la direction
+        if direction == 'NEUTRAL' and tp1 and price_at_signal:
+            if tp1 < price_at_signal:
+                direction = 'SHORT'  # TP en-dessous du prix = signal baissier
+            elif tp1 > price_at_signal:
+                direction = 'LONG'   # TP au-dessus du prix = signal haussier
+        
+        if direction == 'NEUTRAL' or not targets:
+            return {'status': 'SKIP', 'reason': 'No direction or targets'}
         
         if not tp1 or not sl:
             return {'status': 'SKIP', 'reason': 'Missing TP1 or SL'}

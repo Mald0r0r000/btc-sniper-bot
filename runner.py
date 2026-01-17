@@ -128,7 +128,9 @@ def run_scheduled_analysis() -> Dict[str, Any]:
             print("\n📱 Envoi notification Telegram...")
             # Récupérer l'historique pour le compteur de signaux consécutifs
             signal_history = data_store.read_signals()[-20:]  # 20 derniers signaux
-            if notifier.send_signal_alert(report, signal_history=signal_history):
+            # Récupérer les stats de performance (winrate)
+            winrate_stats = data_store.get_performance_stats()
+            if notifier.send_signal_alert(report, signal_history=signal_history, winrate_stats=winrate_stats):
                 print("✅ Notification envoyée!")
             else:
                 print("❌ Échec notification")
@@ -171,11 +173,15 @@ def main():
     # Exécuter l'analyse
     report = run_scheduled_analysis()
     
-    # Vérifier si on doit valider (toutes les 6 runs = ~30min)
+    # Valider les signaux passés à CHAQUE run (était % 6)
     run_number = int(os.getenv('GITHUB_RUN_NUMBER', '0'))
-    if run_number > 0 and run_number % 6 == 0:
-        data_store = GistDataStore()
-        run_validation_cycle(data_store)
+    data_store = GistDataStore()
+    validation_result = run_validation_cycle(data_store)
+    
+    # Afficher le winrate si disponible
+    if validation_result.get('performance'):
+        perf = validation_result['performance']
+        print(f"\n📊 PERFORMANCE: {perf.get('winrate_pct', 0)}% winrate ({perf.get('wins', 0)}W / {perf.get('losses', 0)}L)")
     
     if report:
         print("\n✅ Analyse terminée avec succès")

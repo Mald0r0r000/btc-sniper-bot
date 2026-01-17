@@ -279,6 +279,16 @@ class GistDataStore:
         except Exception as e:
             print(f"⚠️ Erreur chargement poids adaptatifs: {e}")
             return None
+    
+    def get_performance_stats(self) -> Optional[Dict[str, Any]]:
+        """
+        Récupère les statistiques de performance (winrate) depuis le Gist
+        Utilisé pour afficher le winrate dans les notifications
+        """
+        weights_data = self.load_adaptive_weights()
+        if weights_data and 'performance' in weights_data:
+            return weights_data['performance']
+        return None
 
 
 def test_gist_store():
