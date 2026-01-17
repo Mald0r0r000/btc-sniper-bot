@@ -693,7 +693,7 @@ class DecisionEngineV2:
             'momentum': {
                 'score': self.momentum_result.score if hasattr(self, 'momentum_result') else 50,
                 'strength': self.momentum_result.strength.value if hasattr(self, 'momentum_result') else 'UNKNOWN',
-                'trend': self.momentum_result.trend.value if hasattr(self, 'momentum_result') else 'UNKNOWN'
+                'direction': self.momentum_result.direction if hasattr(self, 'momentum_result') else 'UNKNOWN'
             },
             'volatility': self.volatility.get('value', 0),
             'structure_metrics': {
