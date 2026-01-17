@@ -676,6 +676,37 @@ class DecisionEngineV2:
         # Générer les targets
         targets = self._generate_targets(signal_type, direction)
         
+        # --- BLACK BOX RECORDER (Data Logging) ---
+        # Capture raw module states for Pattern Discovery
+        snapshot = {
+            'timestamp': int(datetime.now().timestamp() * 1000),
+            'price': self.price,
+            'scores': {
+                'technical': dimension_scores.get('technical', 50),
+                'structure': dimension_scores.get('structure', 50),
+                'sentiment': dimension_scores.get('sentiment', 50),
+                'onchain': dimension_scores.get('onchain', 50),
+                'macro': dimension_scores.get('macro', 50),
+                'derivatives': dimension_scores.get('derivatives', 50)
+            },
+            'momentum': {
+                'score': self.momentum_result.score if hasattr(self, 'momentum_result') else 50,
+                'strength': self.momentum_result.strength.value if hasattr(self, 'momentum_result') else 'UNKNOWN',
+                'trend': self.momentum_result.trend.value if hasattr(self, 'momentum_result') else 'UNKNOWN'
+            },
+            'volatility': self.volatility.get('value', 0),
+            'structure_metrics': {
+                'fvg_distance': self.structure.get('fvg_distance', 0),
+                'support_proximity': self.structure.get('support_proximity', 0)
+            },
+            'sentiment_metrics': {
+                'fear_greed': self.sentiment.get('fear_greed', {}).get('value', 50),
+                'oi_change': self.oi.get('change_24h', 0)
+            }
+        }
+        # Inject into targets as metadata
+        targets['_analysis_snapshot'] = snapshot
+        
         return CompositeSignal(
             type=signal_type,
             direction=direction,

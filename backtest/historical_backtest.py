@@ -176,6 +176,7 @@ class HistoricalSignalBacktester:
         
         # Count by type
         by_type = {}
+        trade_snapshots = []
         
         for i, signal in enumerate(valid_signals):
             signal_data = signal['signal']
@@ -270,6 +271,19 @@ class HistoricalSignalBacktester:
             
             # --- R&D: SMART ENTRY (Optimized) ---
             # Simulate Smart Entry using Structure (Reverted to 1h for robustness/selectivity)
+            
+            # EXPERIMENT: Force specific params for BREAKOUT signals to catch RETESTS
+            is_breakout = 'BREAKOUT' in signal_type
+            if is_breakout:
+                # Save original params
+                orig_min_imp = self.smart_entry_analyzer.min_improvement_pct
+                orig_max_wait = self.smart_entry_analyzer.max_wait_distance_pct
+                
+                # Tune for Breakout retest: Be very greedy for better entry (retest)
+                # We want to catch the dip back to the breakout level or a liq zone
+                self.smart_entry_analyzer.min_improvement_pct = 0.01  # Wait for ANY improvement
+                self.smart_entry_analyzer.max_wait_distance_pct = 5.0 # Allow deeper retest
+            
             smart_entry = self.smart_entry_analyzer.analyze(
                 direction=direction,
                 current_price=signal['price'],
@@ -278,6 +292,14 @@ class HistoricalSignalBacktester:
                 original_sl=sl,
                 candles=candles_1h_recent # Back to 1h for robust structure analysis
             )
+            
+            if is_breakout:
+                # Restore original params
+                self.smart_entry_analyzer.min_improvement_pct = orig_min_imp
+                self.smart_entry_analyzer.max_wait_distance_pct = orig_max_wait
+                
+                # Log decision for ALL Breakouts
+                print(f"   🧪 BREAKOUT OPTIMIZATION: {signal_type} -> {smart_entry.strategy.value} @ ${smart_entry.optimal_entry:,.0f} (was ${signal['price']:,.0f})")
             
             actual_entry_price = signal['price']
             actual_entry_ts = entry_ts
@@ -349,6 +371,20 @@ class HistoricalSignalBacktester:
             # Check exit on price data (Use 5m for precision exit check)
             # Find index in 5m for exit check
             trade = self.trade_simulator.check_trade_exit(trade, ohlcv_5m) # Using 5m for simulation precision
+            
+            # --- COLLECT RETRO-DATA FOR PATTERN DISCOVERY ---
+            # Now that trade is closed (simulated), let's snapshot the conditions
+            trade_snapshots.append({
+                'id': trade.id,
+                'result': trade.status.value,  # WIN / LOSS
+                'pnl_pct': trade.pnl_pct,
+                'signal_type': signal_type,
+                'momentum_score': momentum.score,
+                'momentum_strength': momentum.strength.value,
+                'smart_entry_strategy': smart_entry.strategy.value,
+                'volatility': volatility,
+                'direction': direction
+            })
         
         # Print signal type distribution
         print(f"   Signals processed by type:")
@@ -371,6 +407,9 @@ class HistoricalSignalBacktester:
         
         # Compare with Gist validation
         self._compare_with_gist_validation(valid_signals, closed_trades)
+        
+        # --- PATTERN DISCOVERY ---
+        self._analyze_patterns(trade_snapshots)
         
         # Save results
         self._save_results(metrics, valid_signals, closed_trades)
@@ -409,7 +448,63 @@ class HistoricalSignalBacktester:
         print(f"\n   Gist Validation:    {gist_winrate:.1f}% WR ({gist_wins}W/{gist_losses}L, {gist_expired} expired)")
         print(f"   Simulator:          {sim_winrate:.1f}% WR ({sim_wins}W/{sim_losses}L)")
         print(f"\n   Note: Differences may be due to slippage/fees modeling")
-    
+        
+
+
+    def _analyze_patterns(self, snapshots: List[Dict]):
+        """
+        Analyze correlation between module scores and trade outcome (Win/Loss).
+        """
+        print("\n" + "=" * 40)
+        print("🔎 PATTERN DISCOVERY REPORT (Retro-Analysis)")
+        print("=" * 40)
+        
+        wins = [s for s in snapshots if s['result'] == 'WIN']
+        losses = [s for s in snapshots if s['result'] == 'LOSS']
+        
+        if not wins and not losses:
+            print("   No data to analyze.")
+            return
+
+        print(f"   Analyzing {len(snapshots)} trades ({len(wins)} Wins, {len(losses)} Losses)...")
+        
+        # Helper to get avg
+        def get_avg(data, key):
+            values = [d[key] for d in data if d.get(key) is not None]
+            return sum(values)/len(values) if values else 0
+            
+        # 1. Momentum Analysis
+        win_mom = get_avg(wins, 'momentum_score')
+        loss_mom = get_avg(losses, 'momentum_score')
+        print(f"\n   1. MOMENTUM SCORE")
+        print(f"      - Avg in WINS:   {win_mom:.1f}")
+        print(f"      - Avg in LOSSES: {loss_mom:.1f}")
+        print(f"      - Delta:         {win_mom - loss_mom:+.1f} (Positive = Momentum predictors success)")
+        
+        # 2. Volatility Analysis
+        win_vol = get_avg(wins, 'volatility')
+        loss_vol = get_avg(losses, 'volatility')
+        print(f"\n   2. VOLATILITY (%)")
+        print(f"      - Avg in WINS:   {win_vol:.2f}%")
+        print(f"      - Avg in LOSSES: {loss_vol:.2f}%")
+        
+        # 3. Smart Entry Strategy Performance
+        print(f"\n   3. SMART ENTRY STRATEGY")
+        strategies = set(s['smart_entry_strategy'] for s in snapshots)
+        for strat in strategies:
+            strat_trades = [s for s in snapshots if s['smart_entry_strategy'] == strat]
+            strat_wins = [s for s in strat_trades if s['result'] == 'WIN']
+            wr = len(strat_wins) / len(strat_trades) * 100 if strat_trades else 0
+            print(f"      - {strat}: {len(strat_trades)} trades, {wr:.1f}% Winrate")
+
+        print("\n   💡 INSIGHTS:")
+        if abs(win_mom - loss_mom) > 5:
+            print("   -> Momentum seems to be a significant predictor.")
+        else:
+            print("   -> Momentum impact is neutral in this sample.")
+            
+        print("=" * 40)
+
     def _save_results(self, metrics: BacktestMetrics, signals: List[Dict], trades: List):
         """Save results to file"""
         results_dir = "backtest/results"
