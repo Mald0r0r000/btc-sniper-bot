@@ -163,6 +163,7 @@ class DecisionEngineV2:
         # Données structure
         fvg_data: Dict = None,
         entropy_data: Dict = None,
+        kdj_data: Dict = None,
         # Données multi-exchange
         multi_exchange_data: Dict = None,
         # Données manipulation
@@ -221,6 +222,7 @@ class DecisionEngineV2:
         # Structure data
         self.fvg = fvg_data or {}
         self.entropy = entropy_data or {}
+        self.kdj = kdj_data or {}
         
         # Advanced data
         self.multi_ex = multi_exchange_data or {}
@@ -437,6 +439,25 @@ class DecisionEngineV2:
             score += 10
         elif vp_shape == 'b-Shape':  # Bearish
             score -= 10
+            
+        # KDJ Momentum (Oscillator)
+        kdj_signal = self.kdj.get('signal', 'NEUTRAL')
+        kdj_state = self.kdj.get('state', 'NEUTRAL')
+        
+        if kdj_signal == 'GOLDEN_CROSS': # Bullish Cross
+            if kdj_state == 'OVERSOLD':
+                score += 15 # Strong Buy
+            else:
+                score += 5  # Weak Buy
+        elif kdj_signal == 'DEAD_CROSS': # Bearish Cross
+            if kdj_state == 'OVERBOUGHT':
+                score -= 15 # Strong Sell
+            else:
+                score -= 5  # Weak Sell
+        elif kdj_state == 'OVERSOLD': # Oversold but no cross yet
+            score += 5
+        elif kdj_state == 'OVERBOUGHT': # Overbought but no cross yet
+            score -= 5
         
         return max(0, min(100, score))
     

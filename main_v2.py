@@ -142,6 +142,17 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     compression = entropy_result.get('compression', {}).get('current', 1.0)
     print(f"   ⚛️ Quantum State: {entropy_result.get('quantum_state', 'UNKNOWN')} ({compression:.3f})")
     
+    # NEW: Oscillator Analysis (KDJ)
+    from analyzers.oscillators import OscillatorAnalyzer
+    osc_analyzer = OscillatorAnalyzer(
+        high=df_micro['high'],
+        low=df_micro['low'],
+        close=df_micro['close']
+    )
+    osc_result = osc_analyzer.analyze()
+    kdj = osc_result.get('values', {})
+    print(f"   🌊 KDJ: {osc_result['signal']} (J={kdj.get('j', 0):.1f}) | Score: {osc_result['score']}")
+    
     # ==========================================
     # 4. ANALYSES AVANCÉES (mode full)
     # ==========================================
@@ -322,6 +333,7 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         volume_profile_data=vp_result,
         fvg_data=fvg_result,
         entropy_data=entropy_result,
+        kdj_data=osc_result,  # KDJ Oscillator
         multi_exchange_data=multi_exchange_data,
         spoofing_data=spoofing_result,
         derivatives_data=derivatives_result,
@@ -414,6 +426,7 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
                 'nearest_bear': fvg_result.get('nearest_bear')
             },
             'entropy': entropy_result,
+            'kdj': osc_result,  # New KDJ result
             'multi_exchange': {
                 'exchanges_connected': multi_exchange_data.get('exchanges_connected', 0),
                 'vwap': multi_exchange_data.get('price_analysis', {}).get('vwap'),
