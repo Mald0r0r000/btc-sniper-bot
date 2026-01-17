@@ -237,7 +237,8 @@ class HistoricalSignalBacktester:
             
             # 2. Check for Weak Momentum -> Scalp Mode
             is_scalp_mode = False
-            if momentum.strength.value == 'WEAK': 
+            # HYBRID STRATEGY: Only Scalp on FADE signals (Mean Reversion)
+            if momentum.strength.value == 'WEAK' and 'FADE' in signal_type: 
                 # Use Fractal Structure on 5m/15m for closer targets
                 fractal_targets = self.momentum_analyzer.get_fractal_targets(
                     candles_5m=candles_5m_recent,
