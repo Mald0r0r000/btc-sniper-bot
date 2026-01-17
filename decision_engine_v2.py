@@ -324,11 +324,34 @@ class DecisionEngineV2:
         whale_modifier = self.hyperliquid.get('signal_modifier', 0)
         adjusted_score = max(0, min(100, adjusted_score + whale_modifier))
         
-        # 5. Déterminer la direction
+        # 5. Déterminer la direction initiale (basée sur le score)
         direction = self._determine_direction(dimension_scores)
         
         # 6. Sélectionner le type de signal
         signal_type = self._select_signal_type(dimension_scores, direction)
+        
+        # 6a. CORRECTION: Force direction based on signal type logic
+        # Some signals have inherent direction that overrides the general score bias
+        if signal_type == SignalType.FADE_HIGH:
+            direction = SignalDirection.SHORT
+        elif signal_type == SignalType.FADE_LOW:
+            direction = SignalDirection.LONG
+        elif signal_type == SignalType.SHORT_SNIPER:
+            direction = SignalDirection.SHORT
+        elif signal_type == SignalType.LONG_SNIPER:
+            direction = SignalDirection.LONG
+        elif signal_type == SignalType.SHORT_BREAKOUT:
+            direction = SignalDirection.SHORT
+        elif signal_type == SignalType.LONG_BREAKOUT:
+            direction = SignalDirection.LONG
+        elif signal_type == SignalType.QUANTUM_SELL:
+            direction = SignalDirection.SHORT
+        elif signal_type == SignalType.QUANTUM_BUY:
+            direction = SignalDirection.LONG
+        elif signal_type == SignalType.SHORT_SQUEEZE:
+            direction = SignalDirection.LONG # Squeeze UP implies LONG
+        elif signal_type == SignalType.LONG_FLUSH:
+            direction = SignalDirection.SHORT # Flush DOWN implies SHORT
         
         # 6b. QUALITY FILTERS (validated via backtesting: +6.2% WR, +$1590 P&L)
         # Filter 1: Skip LONG_BREAKOUT (0% WR in historical backtests)
@@ -929,6 +952,10 @@ class DecisionEngineV2:
         # 3. Fallback final: pourcentages fixes
         if 'tp1' not in targets:
             targets['tp1'] = round(current_price * (1.01 if direction == SignalDirection.LONG else 0.99), 1)
+        if 'tp2' not in targets:
+            targets['tp2'] = round(current_price * (1.02 if direction == SignalDirection.LONG else 0.98), 1)
+        if 'sl' not in targets:
+            targets['sl'] = round(current_price * (0.995 if direction == SignalDirection.LONG else 1.005), 2)
         if 'tp2' not in targets:
             targets['tp2'] = round(current_price * (1.02 if direction == SignalDirection.LONG else 0.98), 1)
         if 'sl' not in targets:
