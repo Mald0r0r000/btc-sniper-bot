@@ -124,15 +124,15 @@ def run_scheduled_analysis() -> Dict[str, Any]:
         data_store.save_signal(signal_record)
         
         # ========== FILTRAGE QUALITÉ DES SIGNAUX ==========
-        # Basé sur l'analyse des performances:
-        # - NO_SIGNAL: 35.8% WR → EXCLURE
-        # - FADE_HIGH: 66.7% WR → INCLURE
-        # - SHORT_SNIPER/BREAKOUT: 100% WR → INCLURE
-        # - FADE_LOW: 52.6% WR → INCLURE
-        # - LONG_SNIPER: 60% WR → INCLURE
+        # Basé sur backtest 13-17 Jan 2026:
+        # - FADE_LOW: 100% WR → INCLURE
+        # - LONG_SNIPER: 66.7% WR → INCLURE
+        # - FADE_HIGH: 0% WR → EXCLURE TEMPORAIREMENT
+        # - NO_SIGNAL: Toujours exclure
         
         QUALITY_SIGNAL_TYPES = [
-            'FADE_HIGH', 'FADE_LOW', 
+            # 'FADE_HIGH',  # EXCLUS: 0% WR récent (à réévaluer)
+            'FADE_LOW', 
             'LONG_SNIPER', 'SHORT_SNIPER',
             'LONG_BREAKOUT', 'SHORT_BREAKOUT'
         ]

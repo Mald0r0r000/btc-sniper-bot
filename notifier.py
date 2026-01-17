@@ -7,6 +7,15 @@ import os
 from typing import Dict, Any, Optional
 from datetime import datetime
 
+# R&D Modules
+try:
+    from smart_entry import SmartEntryAnalyzer, EntryStrategy
+    from momentum_analyzer import MomentumAnalyzer
+    from adaptive_leverage import AdaptiveLeverageCalculator
+    SMART_MODULES_AVAILABLE = True
+except ImportError:
+    SMART_MODULES_AVAILABLE = False
+
 
 class TelegramNotifier:
     """Envoie des notifications Telegram pour les signaux de trading"""
@@ -100,7 +109,31 @@ class TelegramNotifier:
                 tp2_pct = ((price - tp2) / price * 100) if tp2 else 0
                 sl_pct = ((price - sl) / price * 100) if sl else 0
             
-            # P&L avec levier
+            # Calcul du levier adaptatif (R&D)
+            recommended_leverage = 23  # Default fallback
+            leverage_msg = ""
+            
+            if SMART_MODULES_AVAILABLE:
+                try:
+                    lev_calc = AdaptiveLeverageCalculator()
+                    momentum_score = targets.get('_momentum_score', 50)
+                    
+                    lev_rec = lev_calc.calculate(
+                        entry_price=price,
+                        tp1_price=tp1,
+                        sl_price=sl,
+                        direction=dir_text,
+                        momentum_score=momentum_score
+                    )
+                    recommended_leverage = lev_rec.recommended_leverage
+                    leverage = recommended_leverage
+                    
+                    if recommended_leverage != 23:
+                        leverage_msg = f" (Dyn x{recommended_leverage})"
+                except Exception:
+                    leverage = 23
+            
+            # P&L avec levier recommandé
             tp1_leveraged = tp1_pct * leverage
             tp2_leveraged = tp2_pct * leverage
             sl_leveraged = abs(sl_pct) * leverage
@@ -110,7 +143,7 @@ class TelegramNotifier:
             rr_ratio = abs(tp1_pct) / risk if risk > 0 else 0
             
             targets_section = f"""
-<b>🎯 Targets (x{leverage}):</b>
+<b>🎯 Targets (x{leverage}{leverage_msg}):</b>
   • TP1: ${tp1:,.0f} → <b>+{tp1_leveraged:.0f}%</b>
   • TP2: ${tp2:,.0f} → <b>+{tp2_leveraged:.0f}%</b>
   • SL: ${sl:,.0f} → <b>-{sl_leveraged:.0f}%</b>
@@ -191,6 +224,48 @@ class TelegramNotifier:
             warnings_text = '\n'.join([f"  ⚠️ {w}" for w in warnings[:2]])
             warnings_section = f'\n{warnings_text}'
         
+        # ========== SMART ENTRY & MOMENTUM (NEW R&D) ==========
+        smart_section = ''
+        if SMART_MODULES_AVAILABLE and targets and price > 0 and dir_text in ['LONG', 'SHORT']:
+            try:
+                # Analyze smart entry
+                smart_analyzer = SmartEntryAnalyzer()
+                liq_zones = report.get('liquidation_analysis', {})
+                
+                smart_result = smart_analyzer.analyze(
+                    direction=dir_text,
+                    current_price=price,
+                    original_tp1=targets.get('tp1', price),
+                    original_tp2=targets.get('tp2', price),
+                    original_sl=targets.get('sl', price),
+                    liq_zones=liq_zones
+                )
+                
+                # Momentum from targets metadata
+                momentum_score = targets.get('_momentum_score', 0)
+                momentum_tf = targets.get('_momentum_tf', '')
+                
+                # Build smart entry section
+                if smart_result.strategy != EntryStrategy.IMMEDIATE:
+                    if smart_result.strategy == EntryStrategy.WAIT_FOR_DIP:
+                        strategy_text = f"⏳ ATTENDRE ${smart_result.optimal_entry:,.0f}"
+                    else:
+                        strategy_text = f"📝 LIMITE ${smart_result.optimal_entry:,.0f}"
+                    
+                    rr_improvement = f" (R:R +{smart_result.potential_improvement_pct:.0f}%)" if smart_result.potential_improvement_pct > 10 else ""
+                    smart_section = f"\n\n<b>🎯 Smart Entry:</b> {strategy_text}{rr_improvement}"
+                    
+                    if smart_result.nearest_liq_zone:
+                        smart_section += f"\n  • Zone LIQ: ${smart_result.nearest_liq_zone:,.0f}"
+                
+                # Add momentum info if available
+                if momentum_score > 0:
+                    momentum_emoji = '🔥' if momentum_score >= 70 else '⚡' if momentum_score >= 50 else '💨'
+                    smart_section += f"\n  • {momentum_emoji} Momentum: {momentum_score:.0f}/100 ({momentum_tf})"
+                    
+            except Exception:
+                pass  # Failsafe - don't break notifications
+        
         # ========== WINRATE STATS ==========
         winrate_section = ''
         if winrate_stats:
@@ -208,7 +283,7 @@ class TelegramNotifier:
 <b>📈 Direction:</b> {dir_text}
 <b>⏰</b> {timestamp}{consecutive_section}
 {context_section}
-{targets_section}
+{targets_section}{smart_section}
 {reasons_section}{warnings_section}
 
 <code>🏦 {exchanges_connected}/12 | VWAP ${vwap:,.0f}{winrate_section}</code>

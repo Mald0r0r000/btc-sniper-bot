@@ -1,0 +1,214 @@
+{
+  "meta": {
+    "type": "historical_signals",
+    "timestamp": "20260117_134713",
+    "source": "gist",
+    "signals_count": 27
+  },
+  "summary": {
+    "total_trades": 13,
+    "winrate": 46.15384615384615,
+    "total_pnl_usdt": -131.6630648056703,
+    "total_pnl_pct": -1.316630648056703,
+    "profit_factor": 0.9088075517603778,
+    "sharpe_ratio": -0.797342571961973,
+    "max_drawdown_pct": 12.332414298573177,
+    "expectancy": -10.127928061974643
+  },
+  "by_signal_type": {
+    "NO_SIGNAL": {
+      "total": 5,
+      "wins": 3,
+      "losses": 2,
+      "winrate": 60.0,
+      "total_pnl": -251.43510193650087,
+      "avg_pnl": -50.287020387300174,
+      "expectancy": -50.28702038730022
+    },
+    "FADE_HIGH": {
+      "total": 4,
+      "wins": 0,
+      "losses": 4,
+      "winrate": 0.0,
+      "total_pnl": -311.21735524294445,
+      "avg_pnl": -77.80433881073611,
+      "expectancy": -77.80433881073611
+    },
+    "LONG_SNIPER": {
+      "total": 3,
+      "wins": 2,
+      "losses": 1,
+      "winrate": 66.66666666666666,
+      "total_pnl": 172.36111643136297,
+      "avg_pnl": 57.45370547712099,
+      "expectancy": 57.45370547712098
+    },
+    "FADE_LOW": {
+      "total": 1,
+      "wins": 1,
+      "losses": 0,
+      "winrate": 100.0,
+      "total_pnl": 258.6282759424121,
+      "avg_pnl": 258.6282759424121,
+      "expectancy": 258.6282759424121
+    }
+  },
+  "trades": [
+    {
+      "id": "BT_00001",
+      "signal_type": "NO_SIGNAL",
+      "direction": "LONG",
+      "entry_price": 94119.6,
+      "exit_price": 94904.2,
+      "pnl_usdt": 160.61838011454037,
+      "pnl_pct": 16.06183801145404,
+      "status": "WIN",
+      "exit_reason": "TP1",
+      "duration_hours": 0.22409666666666667
+    },
+    {
+      "id": "BT_00002",
+      "signal_type": "NO_SIGNAL",
+      "direction": "LONG",
+      "entry_price": 94033.7,
+      "exit_price": 94858.4,
+      "pnl_usdt": 173.33834216346202,
+      "pnl_pct": 17.059822116998745,
+      "status": "WIN",
+      "exit_reason": "TP1",
+      "duration_hours": 0.04832388888888889
+    },
+    {
+      "id": "BT_00003",
+      "signal_type": "FADE_HIGH",
+      "direction": "LONG",
+      "entry_price": 95592.7,
+      "exit_price": 95498.12705,
+      "pnl_usdt": -55.590348387516826,
+      "pnl_pct": -5.379386606842937,
+      "status": "LOSS",
+      "exit_reason": "SL",
+      "duration_hours": 0.10941361111111111
+    },
+    {
+      "id": "BT_00004",
+      "signal_type": "NO_SIGNAL",
+      "direction": "LONG",
+      "entry_price": 94991.6,
+      "exit_price": 96043.0,
+      "pnl_usdt": 229.65543011647688,
+      "pnl_pct": 22.343573070119074,
+      "status": "WIN",
+      "exit_reason": "TP1",
+      "duration_hours": 7.0167475
+    },
+    {
+      "id": "BT_00005",
+      "signal_type": "LONG_SNIPER",
+      "direction": "LONG",
+      "entry_price": 94868.7,
+      "exit_price": 95946.9,
+      "pnl_usdt": 241.9582719508375,
+      "pnl_pct": 23.026053472650105,
+      "status": "WIN",
+      "exit_reason": "TP1",
+      "duration_hours": 4.997357777777777
+    },
+    {
+      "id": "BT_00006",
+      "signal_type": "LONG_SNIPER",
+      "direction": "LONG",
+      "entry_price": 94979.1,
+      "exit_price": 96060.1,
+      "pnl_usdt": 247.93174355004987,
+      "pnl_pct": 23.063460750457228,
+      "status": "WIN",
+      "exit_reason": "TP1",
+      "duration_hours": 3.3474775
+    },
+    {
+      "id": "BT_00007",
+      "signal_type": "FADE_LOW",
+      "direction": "LONG",
+      "entry_price": 94780.5,
+      "exit_price": 95877.9,
+      "pnl_usdt": 258.6282759424121,
+      "pnl_pct": 23.516125623380884,
+      "status": "WIN",
+      "exit_reason": "TP1",
+      "duration_hours": 2.1566038888888888
+    },
+    {
+      "id": "BT_00008",
+      "signal_type": "FADE_HIGH",
+      "direction": "LONG",
+      "entry_price": 97452.7,
+      "exit_price": 97288.96118500001,
+      "pnl_usdt": -78.43329392839821,
+      "pnl_pct": -6.967797677023321,
+      "status": "LOSS",
+      "exit_reason": "SL",
+      "duration_hours": 0.05040805555555555
+    },
+    {
+      "id": "BT_00009",
+      "signal_type": "FADE_HIGH",
+      "direction": "LONG",
+      "entry_price": 97544.3,
+      "exit_price": 97375.857715,
+      "pnl_usdt": -79.08549093695694,
+      "pnl_pct": -7.0750344706126524,
+      "status": "LOSS",
+      "exit_reason": "SL",
+      "duration_hours": 0.14582638888888888
+    },
+    {
+      "id": "BT_00010",
+      "signal_type": "FADE_HIGH",
+      "direction": "LONG",
+      "entry_price": 97334.0,
+      "exit_price": 97091.23010000002,
+      "pnl_usdt": -98.1082219900725,
+      "pnl_pct": -8.839357925775735,
+      "status": "LOSS",
+      "exit_reason": "SL",
+      "duration_hours": 0.6752211111111112
+    },
+    {
+      "id": "BT_00011",
+      "signal_type": "NO_SIGNAL",
+      "direction": "LONG",
+      "entry_price": 96251.9,
+      "exit_price": 94520.486115,
+      "pnl_usdt": -489.13879273457945,
+      "pnl_pct": -44.463472149570265,
+      "status": "LOSS",
+      "exit_reason": "SL",
+      "duration_hours": 34.259484444444446
+    },
+    {
+      "id": "BT_00012",
+      "signal_type": "NO_SIGNAL",
+      "direction": "LONG",
+      "entry_price": 95571.0,
+      "exit_price": 94411.300735,
+      "pnl_usdt": -325.9084615964007,
+      "pnl_pct": -31.00413426159177,
+      "status": "LOSS",
+      "exit_reason": "SL",
+      "duration_hours": 17.176682222222222
+    },
+    {
+      "id": "BT_00013",
+      "signal_type": "LONG_SNIPER",
+      "direction": "LONG",
+      "entry_price": 95487.1,
+      "exit_price": 94321.38571500001,
+      "pnl_usdt": -317.5288990695244,
+      "pnl_pct": -31.173481394325925,
+      "status": "LOSS",
+      "exit_reason": "SL",
+      "duration_hours": 12.063373888888888
+    }
+  ]
+}

@@ -15,6 +15,7 @@ import numpy as np
 
 import config
 from analyzers.liquidation_zones import LiquidationZoneAnalyzer
+from momentum_analyzer import MomentumAnalyzer, MomentumStrength
 
 
 class SignalType(Enum):
@@ -179,8 +180,10 @@ class DecisionEngineV2:
         trading_style: str = 'swing',
         # Bonus/malus de consistency
         consistency_bonus: int = 0,
-        # Candles pour liquidation zones
+        # Candles pour liquidation zones et MTF targets
         candles_5m: List[Dict] = None,
+        candles_1h: List[Dict] = None,
+        candles_4h: List[Dict] = None,
         # Fluid Dynamics (Venturi et Self-Trading)
         venturi_data: Dict = None,
         self_trading_data: Dict = None,
@@ -220,10 +223,16 @@ class DecisionEngineV2:
         self.oi = open_interest or {}
         self.options = options_data or {}
         self.candles_5m = candles_5m or []
+        self.candles_1h = candles_1h or []
+        self.candles_4h = candles_4h or []
         
         # Liquidation Zone Analyzer
         self.liq_analyzer = LiquidationZoneAnalyzer()
         self.liq_analysis = None
+        
+        # Momentum Analyzer (MTF Fractals)
+        self.momentum_analyzer = MomentumAnalyzer()
+        self.momentum_result = None
         
         # Fluid Dynamics data
         self.venturi = venturi_data or {}
@@ -737,8 +746,42 @@ class DecisionEngineV2:
         current_price = self.price
         direction_str = 'LONG' if direction == SignalDirection.LONG else 'SHORT'
         
-        # 1. Essayer les zones de liquidation si on a des candles
-        if self.candles_5m and len(self.candles_5m) >= 20:
+        # 0. NEW: Analyze momentum to select optimal timeframe for targets
+        try:
+            self.momentum_result = self.momentum_analyzer.analyze(
+                cvd_data=self.cvd,
+                oi_data=self.oi,
+                candles=self.candles_1h if self.candles_1h else self.candles_5m,
+                direction_hint=direction_str
+            )
+            
+            # If we have MTF candles, try to get fractal-based targets
+            if self.candles_1h and self.candles_4h:
+                fractal_targets = self.momentum_analyzer.get_fractal_targets(
+                    candles_5m=self.candles_5m,
+                    candles_1h=self.candles_1h,
+                    candles_4h=self.candles_4h,
+                    direction=direction_str,
+                    momentum_strength=self.momentum_result.strength,
+                    current_price=current_price
+                )
+                
+                # Use fractal targets if valid
+                if fractal_targets.get('tp1'):
+                    targets['tp1'] = fractal_targets['tp1']
+                if fractal_targets.get('tp2'):
+                    targets['tp2'] = fractal_targets['tp2']
+                if fractal_targets.get('sl'):
+                    targets['sl'] = fractal_targets['sl']
+                    
+                # Store timeframe info for notifications
+                targets['_momentum_score'] = self.momentum_result.score
+                targets['_momentum_tf'] = fractal_targets.get('_timeframe', '1h')
+        except Exception:
+            pass  # Fallback to liq zones
+        
+        # 1. Essayer les zones de liquidation si targets manquants
+        if ('tp1' not in targets or 'sl' not in targets) and self.candles_5m and len(self.candles_5m) >= 20:
             try:
                 # Calculer l'analyse des zones de liquidation
                 self.liq_analysis = self.liq_analyzer.analyze(self.candles_5m, current_price=current_price)
@@ -750,18 +793,18 @@ class DecisionEngineV2:
                 
                 # Valider que les targets sont cohérents avec la direction
                 if direction == SignalDirection.LONG:
-                    if liq_targets.get('tp1', 0) > current_price:
+                    if 'tp1' not in targets and liq_targets.get('tp1', 0) > current_price:
                         targets['tp1'] = liq_targets['tp1']
-                    if liq_targets.get('tp2', 0) > current_price:
+                    if 'tp2' not in targets and liq_targets.get('tp2', 0) > current_price:
                         targets['tp2'] = liq_targets['tp2']
-                    if liq_targets.get('sl', float('inf')) < current_price:
+                    if 'sl' not in targets and liq_targets.get('sl', float('inf')) < current_price:
                         targets['sl'] = liq_targets['sl']
                 elif direction == SignalDirection.SHORT:
-                    if liq_targets.get('tp1', float('inf')) < current_price:
+                    if 'tp1' not in targets and liq_targets.get('tp1', float('inf')) < current_price:
                         targets['tp1'] = liq_targets['tp1']
-                    if liq_targets.get('tp2', float('inf')) < current_price:
+                    if 'tp2' not in targets and liq_targets.get('tp2', float('inf')) < current_price:
                         targets['tp2'] = liq_targets['tp2']
-                    if liq_targets.get('sl', 0) > current_price:
+                    if 'sl' not in targets and liq_targets.get('sl', 0) > current_price:
                         targets['sl'] = liq_targets['sl']
             except Exception:
                 pass  # Fallback to VP if liq zones fail
