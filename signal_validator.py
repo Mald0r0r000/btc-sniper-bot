@@ -88,12 +88,16 @@ class SignalValidator:
         
         signal_data = signal.get('signal', {})
         direction = signal_data.get('direction', 'NEUTRAL')
-        targets = signal_data.get('targets', {})
+        # Targets peuvent être dans signal.targets OU à la racine du signal stocké
+        targets = signal_data.get('targets', {}) or signal.get('targets', {})
         price_at_signal = signal.get('price', 0)
         
         tp1 = targets.get('tp1', 0)
         tp2 = targets.get('tp2', 0)
         sl = targets.get('sl', 0)
+        
+        # Debug: afficher les valeurs pour comprendre les SKIP
+        # print(f"   DEBUG: direction={direction}, tp1={tp1}, price={price_at_signal}, targets={bool(targets)}")
         
         # Si direction NEUTRAL mais TP définis, déduire la direction
         if direction == 'NEUTRAL' and tp1 and price_at_signal:
@@ -101,6 +105,12 @@ class SignalValidator:
                 direction = 'SHORT'  # TP en-dessous du prix = signal baissier
             elif tp1 > price_at_signal:
                 direction = 'LONG'   # TP au-dessus du prix = signal haussier
+        
+        # Aussi traiter les directions LONG/SHORT/BULLISH/BEARISH
+        if direction in ['BULLISH']:
+            direction = 'LONG'
+        elif direction in ['BEARISH']:
+            direction = 'SHORT'
         
         if direction == 'NEUTRAL' or not targets:
             return {'status': 'SKIP', 'reason': 'No direction or targets'}
