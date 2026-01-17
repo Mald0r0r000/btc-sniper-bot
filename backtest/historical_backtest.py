@@ -282,8 +282,17 @@ class HistoricalSignalBacktester:
         filename = f"historical_backtest_{timestamp}.json"
         filepath = os.path.join(results_dir, filename)
         
+        # Add open trades
+        open_trades = [t for t in self.trade_simulator.trades if t.status.value == 'OPEN']
+        # We don't need to extend trades list as self.trade_simulator.trades contains ALL trades
+        # But `closed_trades` passed to this function only contains closed ones.
+        # So we should reconstruct the full list or just iterate over self.trade_simulator.trades
+        
+        # Better approach: Use all trades from simulator
+        all_trades = self.trade_simulator.trades
+        
         trades_data = []
-        for t in trades:
+        for t in all_trades:
             entry_dt = datetime.fromtimestamp(t.entry_timestamp / 1000, tz=timezone.utc)
             exit_dt = datetime.fromtimestamp(t.exit_timestamp / 1000, tz=timezone.utc) if t.exit_timestamp else None
 
