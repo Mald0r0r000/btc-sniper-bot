@@ -131,16 +131,19 @@ def run_scheduled_analysis() -> Dict[str, Any]:
         # - NO_SIGNAL: Toujours exclure
         
         QUALITY_SIGNAL_TYPES = [
-            # 'FADE_HIGH',  # EXCLUS: 0% WR récent (à réévaluer)
+            'FADE_HIGH',    # BUG FIXÉ: Direction corrigée, maintenant profitable
             'FADE_LOW', 
             'LONG_SNIPER', 'SHORT_SNIPER',
-            'LONG_BREAKOUT', 'SHORT_BREAKOUT'
+            'SHORT_BREAKOUT',
+            'QUANTUM_BUY', 'QUANTUM_SELL' # Nouveaux signaux forts
         ]
+        # LONG_BREAKOUT retiré car 0% WR confirmé
         
         signal_type = signal.get('type', 'NO_SIGNAL')
         is_quality_signal = signal_type in QUALITY_SIGNAL_TYPES
-        confidence_threshold = 65  # Augmenté de 60 à 65
+        confidence_threshold = 60  # Ramené à 60 car le filtre Consistency nettoie les mauvais signaux
         
+
         # Notifier uniquement si signal de qualité ET confiance >= 65%
         if telegram_enabled and confidence >= confidence_threshold and is_quality_signal:
             print(f"\n📱 Envoi notification Telegram ({signal_type}, {confidence:.0f}%)...")
