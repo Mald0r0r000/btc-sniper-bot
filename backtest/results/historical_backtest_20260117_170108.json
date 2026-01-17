@@ -1,0 +1,170 @@
+{
+  "meta": {
+    "type": "historical_signals",
+    "timestamp": "20260117_170108",
+    "source": "gist",
+    "signals_count": 28
+  },
+  "summary": {
+    "total_trades": 8,
+    "winrate": 62.5,
+    "total_pnl_usdt": 793.3818173116027,
+    "total_pnl_pct": 7.933818173116028,
+    "profit_factor": 2.1041761153442224,
+    "sharpe_ratio": 5.787201291462857,
+    "max_drawdown_pct": 6.07499033102658,
+    "expectancy": 99.17272716395036
+  },
+  "by_signal_type": {
+    "FADE_LOW_SCALP": {
+      "total": 1,
+      "wins": 1,
+      "losses": 0,
+      "winrate": 100.0,
+      "total_pnl": 271.8897355136755,
+      "avg_pnl": 271.8897355136755,
+      "expectancy": 271.8897355136755
+    },
+    "NO_SIGNAL": {
+      "total": 2,
+      "wins": 2,
+      "losses": 0,
+      "winrate": 100.0,
+      "total_pnl": 1171.0725956058113,
+      "avg_pnl": 585.5362978029057,
+      "expectancy": 585.5362978029057
+    },
+    "LONG_SNIPER": {
+      "total": 1,
+      "wins": 0,
+      "losses": 1,
+      "winrate": 0.0,
+      "total_pnl": -174.93667591071244,
+      "avg_pnl": -174.93667591071244,
+      "expectancy": -174.93667591071244
+    },
+    "FADE_HIGH": {
+      "total": 4,
+      "wins": 2,
+      "losses": 2,
+      "winrate": 50.0,
+      "total_pnl": -474.6438378971717,
+      "avg_pnl": -118.66095947429292,
+      "expectancy": -118.66095947429292
+    }
+  },
+  "trades": [
+    {
+      "id": "BT_00001",
+      "signal_type": "NO_SIGNAL",
+      "direction": "LONG",
+      "entry_price": 94119.6,
+      "entry_time": "2026-01-13 21:46:33",
+      "exit_price": 94904.2,
+      "exit_time": "2026-01-13 22:10:00",
+      "pnl_usdt": 553.0354415601471,
+      "pnl_pct": 55.30354415601471,
+      "status": "WIN",
+      "exit_reason": "TP1",
+      "duration_hours": 0.39076333333333335
+    },
+    {
+      "id": "BT_00002",
+      "signal_type": "NO_SIGNAL",
+      "direction": "LONG",
+      "entry_price": 94033.7,
+      "entry_time": "2026-01-13 21:57:06",
+      "exit_price": 94858.4,
+      "exit_time": "2026-01-13 22:10:00",
+      "pnl_usdt": 618.0371540456644,
+      "pnl_pct": 58.56487050272755,
+      "status": "WIN",
+      "exit_reason": "TP1",
+      "duration_hours": 0.21499055555555555
+    },
+    {
+      "id": "BT_00003",
+      "signal_type": "FADE_HIGH",
+      "direction": "LONG",
+      "entry_price": 95592.7,
+      "entry_time": "2026-01-13 22:53:26",
+      "exit_price": 95662.9,
+      "exit_time": "2026-01-13 22:55:00",
+      "pnl_usdt": -20.421503557410055,
+      "pnl_pct": -1.8280700785565516,
+      "status": "WIN",
+      "exit_reason": "TP1",
+      "duration_hours": 0.02608027777777778
+    },
+    {
+      "id": "BT_00004",
+      "signal_type": "FADE_LOW_SCALP",
+      "direction": "LONG",
+      "entry_price": 94780.5,
+      "entry_time": "2026-01-14 11:50:36",
+      "exit_price": 95260.3,
+      "exit_time": "2026-01-14 14:05:00",
+      "pnl_usdt": 271.8897355136755,
+      "pnl_pct": 24.383305806022555,
+      "status": "WIN",
+      "exit_reason": "TP1",
+      "duration_hours": 2.2399372222222222
+    },
+    {
+      "id": "BT_00005",
+      "signal_type": "FADE_HIGH",
+      "direction": "LONG",
+      "entry_price": 97452.7,
+      "entry_time": "2026-01-14 20:56:58",
+      "exit_price": 97625.3,
+      "exit_time": "2026-01-14 21:30:00",
+      "pnl_usdt": 68.94781359056665,
+      "pnl_pct": 6.036118813793047,
+      "status": "WIN",
+      "exit_reason": "TP1",
+      "duration_hours": 0.5504080555555556
+    },
+    {
+      "id": "BT_00006",
+      "signal_type": "FADE_HIGH",
+      "direction": "LONG",
+      "entry_price": 97544.3,
+      "entry_time": "2026-01-14 21:51:15",
+      "exit_price": 97375.857715,
+      "exit_time": "2026-01-14 21:55:00",
+      "pnl_usdt": -231.54574238061878,
+      "pnl_pct": -20.149325262474765,
+      "status": "LOSS",
+      "exit_reason": "SL",
+      "duration_hours": 0.06249305555555556
+    },
+    {
+      "id": "BT_00007",
+      "signal_type": "FADE_HIGH",
+      "direction": "LONG",
+      "entry_price": 97334.0,
+      "entry_time": "2026-01-14 22:19:29",
+      "exit_price": 97091.23010000002,
+      "exit_time": "2026-01-14 22:30:00",
+      "pnl_usdt": -291.62440554970954,
+      "pnl_pct": -25.89927925669261,
+      "status": "LOSS",
+      "exit_reason": "SL",
+      "duration_hours": 0.1752211111111111
+    },
+    {
+      "id": "BT_00008",
+      "signal_type": "LONG_SNIPER",
+      "direction": "LONG",
+      "entry_price": 95184.1,
+      "entry_time": "2026-01-16 04:40:00",
+      "exit_price": 94321.38571500001,
+      "exit_time": "2026-01-16 15:35:00",
+      "pnl_usdt": -174.93667591071244,
+      "pnl_pct": -15.949270256768308,
+      "status": "LOSS",
+      "exit_reason": "SL",
+      "duration_hours": 10.916666666666666
+    }
+  ]
+}

@@ -361,7 +361,11 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     if primary['targets']:
         print("\n🎯 Targets:")
         for key, val in primary['targets'].items():
-            print(f"   • {key}: ${val:,.2f}")
+            # Skip metadata keys (prefixed with _) and non-numeric values
+            if key.startswith('_'):
+                continue
+            if isinstance(val, (int, float)):
+                print(f"   • {key}: ${val:,.2f}")
     
     if primary['warnings']:
         print("\n⚠️ Avertissements:")
