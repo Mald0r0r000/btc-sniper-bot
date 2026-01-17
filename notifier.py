@@ -149,7 +149,17 @@ class TelegramNotifier:
         vwap = multi_ex.get('vwap', 0) or report.get('vwap_global', 0) or report.get('price', 0)
         exchanges_connected = multi_ex.get('exchanges_connected', 0)
         
-        vwap_vs_price = 'AU-DESSUS' if price > vwap else 'EN-DESSOUS' if price < vwap else '='
+        # Calculer la différence en % entre prix et VWAP
+        if vwap and vwap > 0:
+            vwap_diff_pct = ((price - vwap) / vwap) * 100
+            if vwap_diff_pct > 0.05:
+                vwap_vs_price = f'📈 +{vwap_diff_pct:.2f}%'
+            elif vwap_diff_pct < -0.05:
+                vwap_vs_price = f'📉 {vwap_diff_pct:.2f}%'
+            else:
+                vwap_vs_price = f'➡️ ≈ VWAP'
+        else:
+            vwap_vs_price = 'N/A'
         
         context_section = f"""
 <b>🌍 Contexte:</b>
