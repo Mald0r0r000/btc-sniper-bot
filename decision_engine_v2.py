@@ -679,9 +679,16 @@ class DecisionEngineV2:
         
         # --- BLACK BOX RECORDER (Data Logging) ---
         # Capture raw module states for Pattern Discovery
+        # Use getattr with defaults to avoid AttributeError on missing attributes
+        momentum_result = getattr(self, 'momentum_result', None)
+        volatility_data = getattr(self, 'volatility', {})
+        structure_data = getattr(self, 'structure', {})
+        sentiment_data = getattr(self, 'sentiment', {})
+        oi_data = getattr(self, 'oi', {})
+        
         snapshot = {
             'timestamp': int(datetime.now().timestamp() * 1000),
-            'price': self.price,
+            'price': getattr(self, 'price', 0),
             'scores': {
                 'technical': dimension_scores.get('technical', 50),
                 'structure': dimension_scores.get('structure', 50),
@@ -691,18 +698,18 @@ class DecisionEngineV2:
                 'derivatives': dimension_scores.get('derivatives', 50)
             },
             'momentum': {
-                'score': self.momentum_result.score if hasattr(self, 'momentum_result') else 50,
-                'strength': self.momentum_result.strength.value if hasattr(self, 'momentum_result') else 'UNKNOWN',
-                'direction': self.momentum_result.direction if hasattr(self, 'momentum_result') else 'UNKNOWN'
+                'score': momentum_result.score if momentum_result else 50,
+                'strength': momentum_result.strength.value if momentum_result else 'UNKNOWN',
+                'direction': momentum_result.direction if momentum_result else 'UNKNOWN'
             },
-            'volatility': self.volatility.get('value', 0),
+            'volatility': volatility_data.get('value', 0) if isinstance(volatility_data, dict) else 0,
             'structure_metrics': {
-                'fvg_distance': self.structure.get('fvg_distance', 0),
-                'support_proximity': self.structure.get('support_proximity', 0)
+                'fvg_distance': structure_data.get('fvg_distance', 0) if isinstance(structure_data, dict) else 0,
+                'support_proximity': structure_data.get('support_proximity', 0) if isinstance(structure_data, dict) else 0
             },
             'sentiment_metrics': {
-                'fear_greed': self.sentiment.get('fear_greed', {}).get('value', 50),
-                'oi_change': self.oi.get('change_24h', 0)
+                'fear_greed': sentiment_data.get('fear_greed', {}).get('value', 50) if isinstance(sentiment_data, dict) else 50,
+                'oi_change': oi_data.get('change_24h', 0) if isinstance(oi_data, dict) else 0
             }
         }
         # Inject into targets as metadata
