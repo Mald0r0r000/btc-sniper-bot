@@ -18,6 +18,7 @@ from backtest.metrics import MetricsCalculator, BacktestMetrics
 
 from smart_entry import SmartEntryAnalyzer, EntryStrategy
 from adaptive_leverage import AdaptiveLeverageCalculator
+from momentum_analyzer import MomentumAnalyzer, MomentumStrength
 
 
 class HistoricalSignalBacktester:
@@ -47,6 +48,7 @@ class HistoricalSignalBacktester:
         # R&D Modules
         self.smart_entry_analyzer = SmartEntryAnalyzer()
         self.adaptive_leverage = AdaptiveLeverageCalculator()
+        self.momentum_analyzer = MomentumAnalyzer()
         
     def fetch_signals_from_gist(self) -> List[Dict]:
         """Fetch signals from GitHub Gist"""
@@ -145,16 +147,23 @@ class HistoricalSignalBacktester:
         # Step 2: Fetch historical data
         print("\n" + "-" * 40)
         print("STEP 2: Fetching Price Data")
+        # Step 2: Fetch historical data
+        print("\n" + "-" * 40)
+        print("STEP 2: Fetching Price Data (1h & 5m)")
         print("-" * 40)
         
-        ohlcv = self.data_provider.fetch_ohlcv(
+        # Fetch 1h for general trend and 5m for precision entry/exit
+        multi_tf_data = self.data_provider.fetch_multi_timeframe(
             symbol="BTC/USDT:USDT",
-            timeframe="1h",
+            timeframes=["1h", "5m"],
             start_date=first_date,
             end_date=last_date
         )
         
-        if not ohlcv:
+        ohlcv_1h = multi_tf_data.get("1h", [])
+        ohlcv_5m = multi_tf_data.get("5m", [])
+        
+        if not ohlcv_1h or not ohlcv_5m:
             print("❌ Failed to fetch price data")
             return BacktestMetrics(initial_capital=self.trade_simulator.config.initial_capital)
         
@@ -200,25 +209,73 @@ class HistoricalSignalBacktester:
                 entry_ts = int(datetime.fromisoformat(ts.replace('Z', '+00:00')).timestamp() * 1000)
             else:
                 entry_ts = ts
-
-            # Get candles before entry for analysis
-            entry_idx = next((i for i, c in enumerate(ohlcv) if c['timestamp'] >= entry_ts), None)
+                
+            # --- PREPARE DATA ---
+            # Get index in 1h data
+            entry_idx_1h = next((i for i, c in enumerate(ohlcv_1h) if c['timestamp'] >= entry_ts), None)
             
-            if entry_idx is None:
+            # Get index in 5m data (for precision & structure)
+            entry_idx_5m = next((i for i, c in enumerate(ohlcv_5m) if c['timestamp'] >= entry_ts), None)
+            
+            if entry_idx_1h is None or entry_idx_5m is None:
                 continue
 
-            # Prior candles for analysis (last 24h)
-            recent_candles = ohlcv[max(0, entry_idx-24):entry_idx]
+            # Prior candles for analysis
+            candles_1h_recent = ohlcv_1h[max(0, entry_idx_1h-50):entry_idx_1h]
+            candles_5m_recent = ohlcv_5m[max(0, entry_idx_5m-200):entry_idx_5m]
             
-            # --- R&D: SMART ENTRY ---
-            # Simulate Smart Entry using Structure (since we don't have historical liq zones)
+            # --- R&D: IMPLICIT MOMENTUM & SCALPING ---
+            # 1. Calculate Momentum Score
+            momentum = self.momentum_analyzer.analyze(
+                candles=candles_1h_recent, # Use 1H for overall trend/volume momentum
+                direction_hint=direction
+            )
+            
+            tp1 = targets.get('tp1', 0)
+            tp2 = targets.get('tp2', 0)
+            sl = targets.get('sl', 0)
+            
+            # 2. Check for Weak Momentum -> Scalp Mode
+            is_scalp_mode = False
+            if momentum.strength.value == 'WEAK': 
+                # Use Fractal Structure on 5m/15m for closer targets
+                fractal_targets = self.momentum_analyzer.get_fractal_targets(
+                    candles_5m=candles_5m_recent,
+                    candles_1h=candles_1h_recent,
+                    candles_4h=[], # Not using 4h here
+                    direction=direction,
+                    momentum_strength=momentum.strength,
+                    current_price=signal['price']
+                )
+                
+                if fractal_targets:
+                    # Validate targets (must be better than entry)
+                    new_tp1 = fractal_targets.get('tp1', tp1)
+                    new_sl = fractal_targets.get('sl', sl)
+                    
+                    valid_scalp = False
+                    if direction == 'LONG' and new_tp1 > signal['price'] and new_sl < signal['price']:
+                         valid_scalp = True
+                    elif direction == 'SHORT' and new_tp1 < signal['price'] and new_sl > signal['price']:
+                         valid_scalp = True
+                         
+                    if valid_scalp:
+                        tp1 = new_tp1
+                        tp2 = fractal_targets.get('tp2', tp2)
+                        sl = new_sl
+                        is_scalp_mode = True
+                        # print(f"   🐌 SCALP MODE ({signal_type}): TP {targets.get('tp1')} -> {tp1}")
+            
+            
+            # --- R&D: SMART ENTRY (Optimized) ---
+            # Simulate Smart Entry using Structure
             smart_entry = self.smart_entry_analyzer.analyze(
                 direction=direction,
                 current_price=signal['price'],
-                original_tp1=targets.get('tp1', 0),
-                original_tp2=targets.get('tp2', 0),
-                original_sl=targets.get('sl', 0),
-                candles=recent_candles
+                original_tp1=tp1,
+                original_tp2=tp2,
+                original_sl=sl,
+                candles=candles_5m_recent # Use 5m for finer entry structure
             )
             
             actual_entry_price = signal['price']
@@ -226,9 +283,9 @@ class HistoricalSignalBacktester:
             
             # Logic for WAIT_DIP / LIMIT_ORDER
             if smart_entry.strategy in [EntryStrategy.WAIT_FOR_DIP, EntryStrategy.LIMIT_ORDER]:
-                # Look ahead to see if we hit the entry price
-                timeout_candles = 4 # Default 4h timeout
-                future_candles = ohlcv[entry_idx:entry_idx+timeout_candles]
+                # Look ahead 4h using 5m candles for precision
+                timeout_candles = 4 * 12 # 4 hours * 12 (5m candles)
+                future_candles = ohlcv_5m[entry_idx_5m:entry_idx_5m+timeout_candles]
                 
                 entry_hit = False
                 for fc in future_candles:
@@ -246,23 +303,23 @@ class HistoricalSignalBacktester:
                            break
                 
                 if not entry_hit:
-                    # Trade MISSED due to being too greedy
-                    # print(f"   ⚠️ Trade {signal_type} skipped: Entry {smart_entry.optimal_entry} not reached")
                     continue
             
+            
             # --- R&D: ADAPTIVE LEVERAGE ---
-            # Calculate volatility (simple Avg High-Low / Open)
+            # Calculate volatility on 5m for precision
             volatility = 1.0
-            if recent_candles:
-                ranges = [(c['high'] - c['low']) / c['open'] * 100 for c in recent_candles]
+            if candles_5m_recent:
+                # Annualized volatility or simple high-low range? Using Avg Range %
+                ranges = [(c['high'] - c['low']) / c['open'] * 100 for c in candles_5m_recent[-12:]] # Last hour
                 volatility = sum(ranges) / len(ranges)
             
             leverage_rec = self.adaptive_leverage.calculate(
                 entry_price=actual_entry_price,
-                tp1_price=targets.get('tp1', 0),
-                sl_price=targets.get('sl', 0),
+                tp1_price=tp1,
+                sl_price=sl,
                 direction=direction,
-                momentum_score=50, # Default, we don't have historical momentum yet
+                momentum_score=momentum.score, # Use real calculated momentum
                 volatility_pct=volatility,
                 capital=self.trade_simulator.current_capital
             )
@@ -277,16 +334,20 @@ class HistoricalSignalBacktester:
                 direction=direction,
                 signal_type=signal_type,
                 confidence=confidence,
-                tp1=targets.get('tp1', 0),
-                tp2=targets.get('tp2', 0),
-                sl=targets.get('sl', 0),
+                tp1=tp1,
+                tp2=tp2,
+                sl=sl,
                 volatility_pct=volatility
             )
             # Override leverage with adaptive one
             trade.leverage = leverage_rec.recommended_leverage
+            # Tag as scalp if applicable
+            if is_scalp_mode:
+                trade.signal_type = f"{signal_type}_SCALP"
             
-            # Check exit on price data
-            trade = self.trade_simulator.check_trade_exit(trade, ohlcv)
+            # Check exit on price data (Use 5m for precision exit check)
+            # Find index in 5m for exit check
+            trade = self.trade_simulator.check_trade_exit(trade, ohlcv_5m) # Using 5m for simulation precision
         
         # Print signal type distribution
         print(f"   Signals processed by type:")
