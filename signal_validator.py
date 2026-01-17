@@ -237,7 +237,29 @@ class SignalValidator:
     def calculate_performance(self, validated_signals: List[Dict]) -> Dict[str, Any]:
         """
         Calcule les métriques de performance globales
+        Applique les filtres de qualité (LONG_BREAKOUT, Consistency) pour refléter la stratégie actuelle
         """
+        # --- APPLY QUALITY FILTERS (Match Production Logic) ---
+        filtered_signals = []
+        
+        for s in validated_signals:
+            sig_type = s.get('signal', {}).get('type', 'UNKNOWN')
+            
+            # 1. Skip LONG_BREAKOUT (0% WR historic)
+            if sig_type == 'LONG_BREAKOUT':
+                continue
+                
+            # 2. Skip NEUTRAL consistency + declining confidence
+            consistency = s.get('consistency', {})
+            # Handle case where consistency might be missing in old signals
+            if consistency and consistency.get('status') == 'NEUTRAL' and consistency.get('confidence_trend', 0) < -15:
+                continue
+                
+            filtered_signals.append(s)
+            
+        # Use filtered signals for stats
+        validated_signals = filtered_signals
+        
         wins = [s for s in validated_signals if s.get('validation', {}).get('status') == 'WIN']
         losses = [s for s in validated_signals if s.get('validation', {}).get('status') == 'LOSS']
         expired = [s for s in validated_signals if s.get('validation', {}).get('status') == 'EXPIRED']
