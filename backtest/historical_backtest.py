@@ -16,6 +16,9 @@ from backtest.data_provider import DataProvider
 from backtest.trade_simulator import TradeSimulator, SimulatorConfig
 from backtest.metrics import MetricsCalculator, BacktestMetrics
 
+from smart_entry import SmartEntryAnalyzer, EntryStrategy
+from adaptive_leverage import AdaptiveLeverageCalculator
+
 
 class HistoricalSignalBacktester:
     """
@@ -40,6 +43,10 @@ class HistoricalSignalBacktester:
         )
         self.trade_simulator = TradeSimulator(config)
         self.metrics_calculator = MetricsCalculator(initial_capital=initial_capital)
+        
+        # R&D Modules
+        self.smart_entry_analyzer = SmartEntryAnalyzer()
+        self.adaptive_leverage = AdaptiveLeverageCalculator()
         
     def fetch_signals_from_gist(self) -> List[Dict]:
         """Fetch signals from GitHub Gist"""
@@ -187,28 +194,96 @@ class HistoricalSignalBacktester:
             elif direction == 'BEARISH':
                 direction = 'SHORT'
             
-            # Parse timestamp
+            # Parse timestamp first
             ts = signal['timestamp']
             if isinstance(ts, str):
                 entry_ts = int(datetime.fromisoformat(ts.replace('Z', '+00:00')).timestamp() * 1000)
             else:
                 entry_ts = ts
+
+            # Get candles before entry for analysis
+            entry_idx = next((i for i, c in enumerate(ohlcv) if c['timestamp'] >= entry_ts), None)
+            
+            if entry_idx is None:
+                continue
+
+            # Prior candles for analysis (last 24h)
+            recent_candles = ohlcv[max(0, entry_idx-24):entry_idx]
+            
+            # --- R&D: SMART ENTRY ---
+            # Simulate Smart Entry using Structure (since we don't have historical liq zones)
+            smart_entry = self.smart_entry_analyzer.analyze(
+                direction=direction,
+                current_price=signal['price'],
+                original_tp1=targets.get('tp1', 0),
+                original_tp2=targets.get('tp2', 0),
+                original_sl=targets.get('sl', 0),
+                candles=recent_candles
+            )
+            
+            actual_entry_price = signal['price']
+            actual_entry_ts = entry_ts
+            
+            # Logic for WAIT_DIP / LIMIT_ORDER
+            if smart_entry.strategy in [EntryStrategy.WAIT_FOR_DIP, EntryStrategy.LIMIT_ORDER]:
+                # Look ahead to see if we hit the entry price
+                timeout_candles = 4 # Default 4h timeout
+                future_candles = ohlcv[entry_idx:entry_idx+timeout_candles]
+                
+                entry_hit = False
+                for fc in future_candles:
+                   if direction == 'LONG':
+                       if fc['low'] <= smart_entry.optimal_entry:
+                           actual_entry_price = smart_entry.optimal_entry
+                           actual_entry_ts = fc['timestamp']
+                           entry_hit = True
+                           break
+                   else:
+                       if fc['high'] >= smart_entry.optimal_entry:
+                           actual_entry_price = smart_entry.optimal_entry
+                           actual_entry_ts = fc['timestamp']
+                           entry_hit = True
+                           break
+                
+                if not entry_hit:
+                    # Trade MISSED due to being too greedy
+                    # print(f"   ⚠️ Trade {signal_type} skipped: Entry {smart_entry.optimal_entry} not reached")
+                    continue
+            
+            # --- R&D: ADAPTIVE LEVERAGE ---
+            # Calculate volatility (simple Avg High-Low / Open)
+            volatility = 1.0
+            if recent_candles:
+                ranges = [(c['high'] - c['low']) / c['open'] * 100 for c in recent_candles]
+                volatility = sum(ranges) / len(ranges)
+            
+            leverage_rec = self.adaptive_leverage.calculate(
+                entry_price=actual_entry_price,
+                tp1_price=targets.get('tp1', 0),
+                sl_price=targets.get('sl', 0),
+                direction=direction,
+                momentum_score=50, # Default, we don't have historical momentum yet
+                volatility_pct=volatility,
+                capital=self.trade_simulator.current_capital
+            )
             
             # Count by type
             by_type[signal_type] = by_type.get(signal_type, 0) + 1
             
             # Open trade
             trade = self.trade_simulator.open_trade(
-                signal_timestamp=entry_ts,
-                entry_price=signal['price'],
+                signal_timestamp=actual_entry_ts,
+                entry_price=actual_entry_price,
                 direction=direction,
                 signal_type=signal_type,
                 confidence=confidence,
                 tp1=targets.get('tp1', 0),
                 tp2=targets.get('tp2', 0),
                 sl=targets.get('sl', 0),
-                volatility_pct=1.0
+                volatility_pct=volatility
             )
+            # Override leverage with adaptive one
+            trade.leverage = leverage_rec.recommended_leverage
             
             # Check exit on price data
             trade = self.trade_simulator.check_trade_exit(trade, ohlcv)
