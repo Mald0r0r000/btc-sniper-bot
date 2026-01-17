@@ -184,12 +184,17 @@ class BacktestRunner:
         # Convert trades to dicts
         trades_data = []
         for t in trades:
+            entry_dt = datetime.fromtimestamp(t.entry_timestamp / 1000, tz=timezone.utc)
+            exit_dt = datetime.fromtimestamp(t.exit_timestamp / 1000, tz=timezone.utc) if t.exit_timestamp else None
+            
             trades_data.append({
                 "id": t.id,
                 "signal_type": t.signal_type,
                 "direction": t.direction,
                 "entry_price": t.entry_price,
+                "entry_time": entry_dt.strftime("%Y-%m-%d %H:%M:%S"),
                 "exit_price": t.exit_price,
+                "exit_time": exit_dt.strftime("%Y-%m-%d %H:%M:%S") if exit_dt else None,
                 "pnl_usdt": t.pnl_usdt,
                 "pnl_pct": t.pnl_pct,
                 "status": t.status.value,
