@@ -151,7 +151,7 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     )
     osc_result = osc_analyzer.analyze()
     kdj = osc_result.get('values', {})
-    print(f"   🌊 KDJ (1H): {osc_result['signal']} (J={kdj.get('j', 0):.1f}) | Score: {osc_result['score']}")
+    print(f"   🌊 KDJ (1H): {osc_result['signal']} (J={kdj.get('j', 0):.1f} | Dev={kdj.get('deviation', 0):.1f}) | Score: {osc_result['score']}")
     
     # ==========================================
     # 4. ANALYSES AVANCÉES (mode full)
