@@ -61,56 +61,49 @@ class OscillatorAnalyzer:
         d = kdj['d'].iloc[-1]
         j = kdj['j'].iloc[-1]
         
-        # Previous values (for crossover detection)
-        prev_j = kdj['j'].iloc[-2]
-        prev_k = kdj['k'].iloc[-2]
-        prev_d = kdj['d'].iloc[-2]
+        # Calculate Slope (Velocity of J)
+        j_slope = j - kdj['j'].iloc[-2]
+        
+        # Calculate Deviation (Extension from Mean/K)
+        # Large deviation means price moved too fast relative to trend -> Parabolic
+        deviation = j - k
         
         # Determine State
         state = 'NEUTRAL'
-        if j > 100 or k > 80:
+        if j > 90: # Higher threshold for 1H/4H
             state = 'OVERBOUGHT'
-        elif j < 0 or k < 20:
+        elif j < 10: # Lower threshold for 1H/4H
             state = 'OVERSOLD'
             
-        # Detect Crossovers
-        # Golden Cross: J crosses above K/D (and preferably in oversold)
-        is_golden_cross = prev_j < prev_k and j > k
-        # Dead Cross: J crosses below K/D (and preferably in overbought)
-        is_dead_cross = prev_j > prev_k and j < k
-        
         signal = 'NEUTRAL'
-        score = 50.0  # Base score
+        score = 50.0
         
-        if is_golden_cross:
-            signal = 'GOLDEN_CROSS'
-            if state == 'OVERSOLD' or k < 30:
-                score = 80  # Strong Buy signal
-            else:
-                score = 65  # Weak Buy signal
-        elif is_dead_cross:
-            signal = 'DEAD_CROSS'
-            if state == 'OVERBOUGHT' or k > 70:
-                score = 20  # Strong Sell signal
-            else:
-                score = 35  # Weak Sell signal
-        else:
-            # No cross, evaluate based on levels and slope
-            if state == 'OVERBOUGHT':
-                score = 30  # Bearish bias due to extension
-                if j < prev_j: # Turning down
-                    score = 25
-            elif state == 'OVERSOLD':
-                score = 70  # Bullish bias due to extension
-                if j > prev_j: # Turning up
-                    score = 75
-            else:
-                # Middleware - follow trend of J
-                if j > prev_j:
-                    score = 55
-                else:
-                    score = 45
+        # === PARABOLIC REVERSAL LOGIC (User Request) ===
+        # Detect turning points when J is extended and slope reverses
         
+        # BEARISH: J is high, extended above K, and slope turns negative (or drops significantly)
+        if state == 'OVERBOUGHT' and deviation > 15: # Highly extended
+            if j_slope < 0: # Turning down
+                signal = 'PARABOLIC_BEAR'
+                score = 25 # Strong Sell
+            elif j_slope < 2: # Losing momentum
+                score = 40 # Weak Sell / Warning
+                
+        # BULLISH: J is low, extended below K, and slope turns positive
+        elif state == 'OVERSOLD' and deviation < -15: # Highly extended down
+            if j_slope > 0: # Turning up
+                signal = 'PARABOLIC_BULL'
+                score = 75 # Strong Buy
+            elif j_slope > -2: # Losing downward momentum
+                score = 60 # Weak Buy / Watch
+        
+        # Trend Confirmation (High Slope)
+        elif abs(j_slope) > 5:
+            if j_slope > 0:
+                score = 55 # Bullish Momentum
+            else:
+                score = 45 # Bearish Momentum
+                
         return {
             'score': round(score, 1),
             'signal': signal,
@@ -118,6 +111,8 @@ class OscillatorAnalyzer:
             'values': {
                 'k': round(k, 1),
                 'd': round(d, 1),
-                'j': round(j, 1)
+                'j': round(j, 1),
+                'j_slope': round(j_slope, 1),
+                'deviation': round(deviation, 1)
             }
         }

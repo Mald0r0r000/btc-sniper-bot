@@ -142,16 +142,16 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     compression = entropy_result.get('compression', {}).get('current', 1.0)
     print(f"   ⚛️ Quantum State: {entropy_result.get('quantum_state', 'UNKNOWN')} ({compression:.3f})")
     
-    # NEW: Oscillator Analysis (KDJ)
+    # NEW: Oscillator Analysis (KDJ) - 1H/Meso timeframe (User request: reduce noise)
     from analyzers.oscillators import OscillatorAnalyzer
     osc_analyzer = OscillatorAnalyzer(
-        high=df_micro['high'],
-        low=df_micro['low'],
-        close=df_micro['close']
+        high=df_meso['high'],
+        low=df_meso['low'],
+        close=df_meso['close']
     )
     osc_result = osc_analyzer.analyze()
     kdj = osc_result.get('values', {})
-    print(f"   🌊 KDJ: {osc_result['signal']} (J={kdj.get('j', 0):.1f}) | Score: {osc_result['score']}")
+    print(f"   🌊 KDJ (1H): {osc_result['signal']} (J={kdj.get('j', 0):.1f}) | Score: {osc_result['score']}")
     
     # ==========================================
     # 4. ANALYSES AVANCÉES (mode full)

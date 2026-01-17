@@ -441,24 +441,18 @@ class DecisionEngineV2:
             score -= 10
             
         # KDJ Momentum (Oscillator)
+        # Updated Logic: Parabolic Reversal & Slope
         kdj_signal = self.kdj.get('signal', 'NEUTRAL')
-        kdj_state = self.kdj.get('state', 'NEUTRAL')
         
-        if kdj_signal == 'GOLDEN_CROSS': # Bullish Cross
-            if kdj_state == 'OVERSOLD':
-                score += 15 # Strong Buy
-            else:
-                score += 5  # Weak Buy
-        elif kdj_signal == 'DEAD_CROSS': # Bearish Cross
-            if kdj_state == 'OVERBOUGHT':
-                score -= 15 # Strong Sell
-            else:
-                score -= 5  # Weak Sell
-        elif kdj_state == 'OVERSOLD': # Oversold but no cross yet
-            score += 5
-        elif kdj_state == 'OVERBOUGHT': # Overbought but no cross yet
-            score -= 5
-        
+        if kdj_signal == 'PARABOLIC_BULL':
+            score += 25  # Strong reversal signal
+        elif kdj_signal == 'PARABOLIC_BEAR':
+            score -= 25  # Strong reversal signal
+        elif kdj_signal == 'GOLDEN_CROSS': # Fallback if standard logic persists
+             score += 5
+        elif kdj_signal == 'DEAD_CROSS':
+             score -= 5
+             
         return max(0, min(100, score))
     
     def _score_structure(self) -> float:
