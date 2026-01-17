@@ -119,31 +119,36 @@ class TelegramNotifier:
         context = report.get('market_context', {})
         indicators = report.get('indicators', {})
         
-        # Hyperliquid Whales
-        hyperliquid = indicators.get('hyperliquid', {}) or report.get('hyperliquid', {})
-        whale_sentiment = hyperliquid.get('whale_analysis', {}).get('sentiment', 'N/A')
-        whale_count = hyperliquid.get('whale_analysis', {}).get('active_whales', 0)
+        # Hyperliquid Whales - Correction des chemins
+        hyperliquid = indicators.get('hyperliquid', {})
+        whale_analysis = hyperliquid.get('whale_analysis', {})
+        whale_sentiment = whale_analysis.get('sentiment', 'N/A')
+        whale_count = whale_analysis.get('whale_count', 0)  # Était 'active_whales'
         
-        # OI Delta
-        oi_data = indicators.get('open_interest', {}) or report.get('open_interest', {})
-        oi_delta = oi_data.get('delta', {}).get('1h', {}).get('delta_oi_pct', 0)
+        # OI Delta - Récupérer depuis indicators.open_interest ou key_metrics
+        oi_data = indicators.get('open_interest', {})
+        # Le delta est souvent dans le rapport principal, pas dans indicators
+        oi_delta = report.get('open_interest', {}).get('delta', {}).get('1h', {}).get('delta_oi_pct', 0)
+        if oi_delta == 0:
+            # Fallback: chercher dans key_metrics si disponible
+            oi_delta = report.get('key_metrics', {}).get('oi_delta_1h', 0) or 0
         oi_emoji = '📈' if oi_delta > 0 else '📉' if oi_delta < 0 else '➡️'
         
         # Quantum State
         quantum_state = context.get('quantum_state', 'N/A')
         
-        # Venturi
-        fluid = indicators.get('fluid_dynamics', {}) or report.get('fluid_dynamics', {})
+        # Venturi - Correction du chemin
+        fluid = indicators.get('fluid_dynamics', {})
         venturi = fluid.get('venturi', {})
         venturi_dir = venturi.get('direction', 'N/A')
-        venturi_prob = venturi.get('probability', 0)
+        venturi_prob = venturi.get('breakout_probability', 0)  # Était 'probability'
         
-        # VWAP
-        vwap = report.get('vwap_global', 0) or report.get('multi_exchange', {}).get('vwap', 0)
+        # VWAP et Exchanges - Correction des chemins (dans indicators.multi_exchange)
+        multi_ex = indicators.get('multi_exchange', {})
+        vwap = multi_ex.get('vwap', 0) or report.get('vwap_global', 0) or report.get('price', 0)
+        exchanges_connected = multi_ex.get('exchanges_connected', 0)
+        
         vwap_vs_price = 'AU-DESSUS' if price > vwap else 'EN-DESSOUS' if price < vwap else '='
-        
-        # Exchanges
-        exchanges_connected = report.get('exchanges_connected', 0) or report.get('multi_exchange', {}).get('exchanges_connected', 0)
         
         context_section = f"""
 <b>🌍 Contexte:</b>
