@@ -88,8 +88,9 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     
     print(f"   📈 Bougies: {len(df_micro)} (5m) | {len(df_meso)} (1h) | {len(df_macro)} (1d)")
     
-    # Convertir en liste de dicts pour les Liquidation Zones
+    # Convertir en liste de dicts pour les Liquidation Zones et Smart Entry
     candles_5m = df_micro.to_dict('records') if df_micro is not None and len(df_micro) > 0 else []
+    candles_1h = df_meso.to_dict('records') if df_meso is not None and len(df_meso) > 0 else []
     
     # Order Book
     order_book = connector.fetch_order_book(limit=config.ORDER_BOOK_LIMIT)
@@ -323,6 +324,7 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         options_data=options_result,
         trading_style='adaptive',  # Utilise les poids calibrés sur le winrate historique
         candles_5m=candles_5m,  # Pour les zones de liquidation
+        candles_1h=candles_1h,  # Pour Smart Entry (Robustesse)
         venturi_data=venturi_result,  # Fluid dynamics - Venturi
         self_trading_data=self_trading_result,  # Fluid dynamics - Self-Trading
         hyperliquid_data=hyperliquid_result  # Whale tracking sentiment

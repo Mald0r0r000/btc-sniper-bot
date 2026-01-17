@@ -16,6 +16,8 @@ import numpy as np
 import config
 from analyzers.liquidation_zones import LiquidationZoneAnalyzer
 from momentum_analyzer import MomentumAnalyzer, MomentumStrength
+from smart_entry import SmartEntryAnalyzer, EntryStrategy
+
 
 
 class SignalType(Enum):
@@ -233,6 +235,11 @@ class DecisionEngineV2:
         # Momentum Analyzer (MTF Fractals)
         self.momentum_analyzer = MomentumAnalyzer()
         self.momentum_result = None
+        
+        # Smart Entry Analyzer (Using 1h candles for robustness)
+        self.smart_entry_analyzer = SmartEntryAnalyzer()
+
+
         
         # Fluid Dynamics data
         self.venturi = venturi_data or {}
@@ -683,6 +690,18 @@ class DecisionEngineV2:
             dimension_scores=dimension_scores,
             manipulation_penalty=manipulation_penalty
         )
+        
+        # --- R&D: SMART ENTRY INTEGRATION ---
+        # Calculate Smart Entry (using 1H candles for robustness as per Backtest)
+        if self.candles_1h and signal_type != SignalType.NO_SIGNAL:
+             smart_entry_data = self._analyze_smart_entry(signal)
+             if smart_entry_data:
+                 # Enrich signal with smart entry data
+                 signal.reasons.append(f"🎯 Smart Entry: {smart_entry_data['strategy_text']}")
+
+        return signal
+        
+
     
     def _generate_reasons(self, scores: Dict[str, float], signal_type: SignalType) -> List[str]:
         """Génère les raisons du signal"""
@@ -766,17 +785,28 @@ class DecisionEngineV2:
                     current_price=current_price
                 )
                 
-                # Use fractal targets if valid
-                if fractal_targets.get('tp1'):
-                    targets['tp1'] = fractal_targets['tp1']
-                if fractal_targets.get('tp2'):
-                    targets['tp2'] = fractal_targets['tp2']
-                if fractal_targets.get('sl'):
-                    targets['sl'] = fractal_targets['sl']
-                    
                 # Store timeframe info for notifications
                 targets['_momentum_score'] = self.momentum_result.score
                 targets['_momentum_tf'] = fractal_targets.get('_timeframe', '1h')
+                
+                # --- HYBRID STRATEGY: FADE SCALPING ---
+                # Only apply Scalping (Close targets) if Momentum is WEAK and Signal is FADE
+                # This matches the +141% Backtest Strategy
+                is_fade = 'FADE' in str(signal_type.name)
+                is_weak_momentum = self.momentum_result.strength == MomentumStrength.WEAK
+                
+                can_use_fractals = False
+                if is_fade and is_weak_momentum:
+                    # Hybrid Strategy: Scalp on FADE + WEAK Momentum (High precision)
+                    can_use_fractals = True
+                
+                # Apply fractal targets ONLY if conditions met
+                if can_use_fractals:
+                    if fractal_targets.get('tp1'): targets['tp1'] = fractal_targets['tp1']
+                    if fractal_targets.get('tp2'): targets['tp2'] = fractal_targets['tp2']
+                    if fractal_targets.get('sl'): targets['sl'] = fractal_targets['sl']
+                    targets['_scalp_mode'] = True
+
         except Exception:
             pass  # Fallback to liq zones
         
@@ -922,3 +952,49 @@ class DecisionEngineV2:
             return "WEAK"
         else:
             return "NO_TRADE"
+
+    def _analyze_smart_entry(self, signal: CompositeSignal) -> Optional[Dict]:
+        """
+        Analyse Smart Entry basée sur la structure 1H (Robustesse Backtest +141%)
+        """
+        try:
+            if not self.candles_1h:
+                return None
+            
+            # Use 1h candles for robust structure analysis
+            smart_result = self.smart_entry_analyzer.analyze(
+                direction=signal.direction.value,
+                current_price=self.price,
+                original_tp1=signal.targets.get('tp1', self.price),
+                original_tp2=signal.targets.get('tp2', self.price),
+                original_sl=signal.targets.get('sl', self.price),
+                candles=self.candles_1h,
+                liq_zones=self.liq_analyzer.analyze(self.candles_5m, self.price) if self.candles_5m else None
+            )
+            
+            if smart_result.strategy != EntryStrategy.IMMEDIATE:
+                if smart_result.strategy == EntryStrategy.WAIT_FOR_DIP:
+                    strategy_text = f"ATTENDRE ${smart_result.optimal_entry:,.0f}"
+                else:
+                    strategy_text = f"LIMITE ${smart_result.optimal_entry:,.0f}"
+                    
+                # Store result in signal targets for easy access in Notifier
+                # We use specific keys starting with _ to denote metadata
+                signal.targets['_smart_entry_strategy'] = smart_result.strategy.value
+                signal.targets['_smart_entry_price'] = smart_result.optimal_entry
+                signal.targets['_smart_entry_text'] = strategy_text
+                if smart_result.nearest_liq_zone:
+                    signal.targets['_smart_entry_liq_zone'] = smart_result.nearest_liq_zone
+                if smart_result.potential_improvement_pct > 0:
+                     signal.targets['_smart_entry_rr_improvement'] = smart_result.potential_improvement_pct
+                
+                return {
+                    'strategy': smart_result.strategy.value,
+                    'price': smart_result.optimal_entry,
+                    'strategy_text': strategy_text
+                }
+            return None
+            
+        except Exception as e:
+            print(f"⚠️ Error in Smart Entry Analysis: {e}")
+            return None

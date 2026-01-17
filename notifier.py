@@ -225,46 +225,36 @@ class TelegramNotifier:
             warnings_section = f'\n{warnings_text}'
         
         # ========== SMART ENTRY & MOMENTUM (NEW R&D) ==========
+        # ========== SMART ENTRY & MOMENTUM (HYBRID STRATEGY) ==========
         smart_section = ''
-        if SMART_MODULES_AVAILABLE and targets and price > 0 and dir_text in ['LONG', 'SHORT']:
-            try:
-                # Analyze smart entry
-                smart_analyzer = SmartEntryAnalyzer()
-                liq_zones = report.get('liquidation_analysis', {})
+        if targets:
+            # Momentum info
+            momentum_score = targets.get('_momentum_score', 0)
+            momentum_tf = targets.get('_momentum_tf', '')
+            
+            # Smart Entry info (pre-calculated by DecisionEngineV2)
+            smart_strategy = targets.get('_smart_entry_strategy')
+            smart_price = targets.get('_smart_entry_price')
+            smart_text = targets.get('_smart_entry_text')
+            smart_liq = targets.get('_smart_entry_liq_zone')
+            rr_improvement = targets.get('_smart_entry_rr_improvement', 0)
+            
+            if smart_strategy and smart_text:
+                if smart_strategy == 'WAIT_DIP':
+                    strategy_text = f"⏳ {smart_text}"
+                else:
+                    strategy_text = f"📝 {smart_text}"
                 
-                smart_result = smart_analyzer.analyze(
-                    direction=dir_text,
-                    current_price=price,
-                    original_tp1=targets.get('tp1', price),
-                    original_tp2=targets.get('tp2', price),
-                    original_sl=targets.get('sl', price),
-                    liq_zones=liq_zones
-                )
+                improvement_text = f" (R:R +{rr_improvement:.0f}%)" if rr_improvement > 10 else ""
+                smart_section = f"\n\n<b>🎯 Smart Entry (Hybrid):</b> {strategy_text}{improvement_text}"
                 
-                # Momentum from targets metadata
-                momentum_score = targets.get('_momentum_score', 0)
-                momentum_tf = targets.get('_momentum_tf', '')
-                
-                # Build smart entry section
-                if smart_result.strategy != EntryStrategy.IMMEDIATE:
-                    if smart_result.strategy == EntryStrategy.WAIT_FOR_DIP:
-                        strategy_text = f"⏳ ATTENDRE ${smart_result.optimal_entry:,.0f}"
-                    else:
-                        strategy_text = f"📝 LIMITE ${smart_result.optimal_entry:,.0f}"
-                    
-                    rr_improvement = f" (R:R +{smart_result.potential_improvement_pct:.0f}%)" if smart_result.potential_improvement_pct > 10 else ""
-                    smart_section = f"\n\n<b>🎯 Smart Entry:</b> {strategy_text}{rr_improvement}"
-                    
-                    if smart_result.nearest_liq_zone:
-                        smart_section += f"\n  • Zone LIQ: ${smart_result.nearest_liq_zone:,.0f}"
-                
-                # Add momentum info if available
-                if momentum_score > 0:
-                    momentum_emoji = '🔥' if momentum_score >= 70 else '⚡' if momentum_score >= 50 else '💨'
-                    smart_section += f"\n  • {momentum_emoji} Momentum: {momentum_score:.0f}/100 ({momentum_tf})"
-                    
-            except Exception:
-                pass  # Failsafe - don't break notifications
+                if smart_liq:
+                    smart_section += f"\n  • Zone LIQ: ${smart_liq:,.0f}"
+            
+            # Add momentum info if available
+            if momentum_score > 0:
+                momentum_emoji = '🔥' if momentum_score >= 70 else '⚡' if momentum_score >= 50 else '💨'
+                smart_section += f"\n  • {momentum_emoji} Momentum: {momentum_score:.0f}/100 ({momentum_tf})"
         
         # ========== WINRATE STATS ==========
         winrate_section = ''
