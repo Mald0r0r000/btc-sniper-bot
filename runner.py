@@ -123,9 +123,27 @@ def run_scheduled_analysis() -> Dict[str, Any]:
         }
         data_store.save_signal(signal_record)
         
-        # Notifier si signal fort (confiance >= 60%)
-        if telegram_enabled and confidence >= 60:
-            print("\n📱 Envoi notification Telegram...")
+        # ========== FILTRAGE QUALITÉ DES SIGNAUX ==========
+        # Basé sur l'analyse des performances:
+        # - NO_SIGNAL: 35.8% WR → EXCLURE
+        # - FADE_HIGH: 66.7% WR → INCLURE
+        # - SHORT_SNIPER/BREAKOUT: 100% WR → INCLURE
+        # - FADE_LOW: 52.6% WR → INCLURE
+        # - LONG_SNIPER: 60% WR → INCLURE
+        
+        QUALITY_SIGNAL_TYPES = [
+            'FADE_HIGH', 'FADE_LOW', 
+            'LONG_SNIPER', 'SHORT_SNIPER',
+            'LONG_BREAKOUT', 'SHORT_BREAKOUT'
+        ]
+        
+        signal_type = signal.get('type', 'NO_SIGNAL')
+        is_quality_signal = signal_type in QUALITY_SIGNAL_TYPES
+        confidence_threshold = 65  # Augmenté de 60 à 65
+        
+        # Notifier uniquement si signal de qualité ET confiance >= 65%
+        if telegram_enabled and confidence >= confidence_threshold and is_quality_signal:
+            print(f"\n📱 Envoi notification Telegram ({signal_type}, {confidence:.0f}%)...")
             # Récupérer l'historique pour le compteur de signaux consécutifs
             signal_history = data_store.read_signals()[-20:]  # 20 derniers signaux
             # Récupérer les stats de performance (winrate)
@@ -134,7 +152,9 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 print("✅ Notification envoyée!")
             else:
                 print("❌ Échec notification")
-        elif confidence >= 60:
+        elif telegram_enabled and confidence >= confidence_threshold and not is_quality_signal:
+            print(f"\n🔇 Signal {signal_type} exclu (faible winrate historique)")
+        elif confidence >= confidence_threshold:
             print("\n⚠️ Signal fort mais Telegram non configuré")
         else:
             print(f"\n💤 Signal faible ({confidence:.0f}/100) - Pas de notification")
