@@ -1,6 +1,5 @@
 
 import pandas as pd
-import pandas_ta as ta
 from typing import Dict, Any
 from exchange import BitgetConnector
 
@@ -12,7 +11,7 @@ class MACDAnalyzer:
     def __init__(self):
         self.connector = BitgetConnector()
         self.timeframe = '3d'
-        # MACD Parameters
+        # MACD Parameters (12, 26, 9)
         self.fast = 12
         self.slow = 26
         self.signal = 9
@@ -36,25 +35,28 @@ class MACDAnalyzer:
                     'available': False
                 }
 
-            # Calculate MACD using pandas-ta
-            # Default columns: MACD_12_26_9, MACDh_12_26_9, MACDs_12_26_9
-            macd = df.ta.macd(close='close', fast=self.fast, slow=self.slow, signal=self.signal)
+            # Calculate MACD manually using pandas EMA
+            # MACD = 12-EMA - 26-EMA
+            # Signal = 9-EMA of MACD
+            # Histogram = MACD - Signal
             
-            if macd is None or macd.empty:
-                return {'available': False}
-
-            # Get latest values (last row)
-            # Names are usually: MACD_12_26_9 (Line), MACDh_12_26_9 (Hist), MACDs_12_26_9 (Signal)
-            latest = macd.iloc[-1]
+            # Calculate EMAs
+            ema_fast = df['close'].ewm(span=self.fast, adjust=False).mean()
+            ema_slow = df['close'].ewm(span=self.slow, adjust=False).mean()
             
-            # Identify column names dynamically to be safe
-            macd_col = [c for c in macd.columns if c.startswith('MACD_')][0]
-            hist_col = [c for c in macd.columns if c.startswith('MACDh_')][0]
-            sig_col  = [c for c in macd.columns if c.startswith('MACDs_')][0]
+            # MACD Line
+            macd_line = ema_fast - ema_slow
             
-            macd_val = float(latest[macd_col])
-            hist_val = float(latest[hist_col])
-            sig_val  = float(latest[sig_col])
+            # Signal Line (9-period EMA of MACD)
+            signal_line = macd_line.ewm(span=self.signal, adjust=False).mean()
+            
+            # Histogram
+            histogram = macd_line - signal_line
+            
+            # Get latest values
+            macd_val = float(macd_line.iloc[-1])
+            sig_val = float(signal_line.iloc[-1])
+            hist_val = float(histogram.iloc[-1])
             
             # Determine Trend
             # Bullish: MACD > Signal (Hist > 0)
@@ -66,8 +68,7 @@ class MACDAnalyzer:
             else:
                 trend = 'NEUTRAL'
                 
-            # Determine Strength (Slope of Histogram or Magnitude)
-            # Simple heuristic: absolute value of histogram
+            # Determine Strength (absolute value of histogram)
             strength = abs(hist_val)
 
             return {
