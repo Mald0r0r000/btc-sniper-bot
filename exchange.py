@@ -66,7 +66,10 @@ class BitgetConnector:
             
             granularity = granularity_map.get(timeframe, timeframe)
             
-            # Use ccxt's API call for Bitget v2 history endpoint
+            # Direct API call to Bitget v2 endpoint
+            import requests
+            
+            url = "https://api.bitget.com/api/v2/mix/market/history-candles"
             params = {
                 'symbol': self.symbol.replace('/', ''),  # BTCUSDT format
                 'granularity': granularity,
@@ -74,15 +77,20 @@ class BitgetConnector:
                 'productType': 'usdt-futures'
             }
             
-            # Bitget futures v2 history endpoint
-            response = self.exchange.contractPublicGetMixV2MarketHistoryCandles(params)
+            response = requests.get(url, params=params, timeout=10)
             
-            if not response or 'data' not in response:
+            if response.status_code != 200:
+                print(f"⚠️ Bitget API error ({response.status_code}): {response.text[:200]}")
+                return pd.DataFrame()
+            
+            data = response.json()
+            
+            if not data or 'data' not in data or not data['data']:
                 print(f"⚠️ No history data returned for {timeframe}")
                 return pd.DataFrame()
             
-            # Parse response - Bitget returns [timestamp, open, high, low, close, volume, ...]
-            candles = response['data']
+            # Parse response - Bitget returns [timestamp, open, high, low, close, volume, usdtVolume]
+            candles = data['data']
             df = pd.DataFrame(candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'usdtVolume'])
             
             # Convert to proper types
