@@ -490,6 +490,7 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
             },
             'entropy': entropy_result,
             'kdj': osc_result,  # New KDJ result
+            'adx': adx_result,  # New ADX result
             'multi_exchange': {
                 'exchanges_connected': multi_exchange_data.get('exchanges_connected', 0),
                 'vwap': multi_exchange_data.get('price_analysis', {}).get('vwap'),

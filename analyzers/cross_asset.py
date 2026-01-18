@@ -220,8 +220,8 @@ class CrossAssetAnalyzer:
                 btc_impact = 'NEUTRAL'
                 
             return {
-                'current': round(current, 1),
-                'yoy_change': round(yoy_change, 2),
+                'current': float(round(current, 1)),
+                'yoy_change': float(round(yoy_change, 2)),
                 'offset_90d_trend': offset_trend,
                 'btc_impact': btc_impact,
                 'available': True
