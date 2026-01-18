@@ -133,7 +133,7 @@ class GistDataStore:
             if len(signals) > 1000:
                 signals = signals[-1000:]
             
-            # Mettre à jour le Gist
+            # Mettre à jour le Gist (JSON compact pour économiser l'espace)
             response = requests.patch(
                 f"{self.api_base}/gists/{self.gist_id}",
                 headers=self._headers(),
@@ -144,7 +144,7 @@ class GistDataStore:
                                 "last_updated": datetime.now(timezone.utc).isoformat(),
                                 "total_signals": len(signals),
                                 "signals": signals
-                            }, indent=2)
+                            }, separators=(',', ':'))  # Compact JSON
                         }
                     }
                 },

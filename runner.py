@@ -93,32 +93,117 @@ def run_scheduled_analysis() -> Dict[str, Any]:
         print(f"📈 Direction: {direction}")
         print(f"📊 Confiance: {confidence:.0f}/100")
         
-        # Sauvegarder le signal enrichi dans le Gist
+        # Sauvegarder le signal enrichi dans le Gist (données complètes pour ML)
+        indicators = report.get("indicators", {})
+        
+        # Extraire les données order book
+        ob_data = indicators.get("order_book", {})
+        
+        # Extraire les données CVD
+        cvd_data = indicators.get("cvd", {})
+        
+        # Extraire Volume Profile
+        vp_data = indicators.get("volume_profile", {})
+        
+        # Extraire les funding rates multi-exchange
+        deriv_data = indicators.get("derivatives", {})
+        
+        # Extraire cross-asset data
+        cross_asset = {}
+        macro_indicators = indicators.get("macro", {})
+        # Note: cross_asset_data is in market_context from decision engine
+        market_ctx = report.get("market_context", {})
+        
+        # Extraire les indicateurs techniques
+        kdj_data = indicators.get("kdj", {})
+        
+        # Extraire OHLCV snapshot (5 dernières bougies via candles in decision engine data)
+        # Ces données sont dans le report mais pas directement - on utilise les données d'entropy
+        entropy_data = indicators.get("entropy", {})
+        
+        # Construire le signal_record enrichi (clés courtes pour compacité)
         signal_record = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "price": report.get("price", 0),
-            "signal": {
-                "type": signal.get("type"),
-                "direction": direction,
-                "confidence": confidence,
-                "strength": signal.get("strength"),
-                "manipulation_penalty": signal.get("manipulation_penalty", 0)
+            "ts": datetime.now(timezone.utc).isoformat(),  # timestamp
+            "px": report.get("price", 0),  # price
+            "sig": {
+                "t": signal.get("type"),  # type
+                "d": direction,  # direction
+                "c": round(confidence, 1),  # confidence
+                "s": signal.get("strength"),  # strength
+                "mp": signal.get("manipulation_penalty", 0)  # manipulation_penalty
             },
-            "dimension_scores": signal.get("dimension_scores", {}),
-            "targets": signal.get("targets", {}),
-            # Données enrichies pour analyse
-            "market_context": report.get("market_context", {}),
-            "consistency": report.get("consistency", {}),
-            "fluid_dynamics": {
-                "venturi": report.get("indicators", {}).get("fluid_dynamics", {}).get("venturi", {}),
-                "self_trading": report.get("indicators", {}).get("fluid_dynamics", {}).get("self_trading", {})
+            "ds": {k: round(v, 1) for k, v in signal.get("dimension_scores", {}).items()},  # dimension_scores
+            "tgt": signal.get("targets", {}),  # targets
+            "ctx": {  # market_context compact
+                "qs": market_ctx.get("quantum_state"),
+                "vp": market_ctx.get("vp_shape"),
+                "mr": market_ctx.get("manipulation_risk"),
+                "fg": market_ctx.get("fear_greed"),
+                "tb": market_ctx.get("technical_bias"),
+                "sb": market_ctx.get("structure_bias"),
+                "db": market_ctx.get("derivatives_bias"),
+                "stb": market_ctx.get("sentiment_bias"),
+                "mb": market_ctx.get("macro_bias")
             },
-            # Métriques clés extraites
-            "key_metrics": {
-                "vwap": report.get("vwap_global"),
-                "fear_greed": report.get("sentiment", {}).get("fear_greed", {}).get("value"),
-                "oi_delta_1h": report.get("open_interest", {}).get("delta", {}).get("1h", {}).get("delta_oi_pct"),
-                "exchanges_connected": report.get("exchanges_connected", 0)
+            "con": {  # consistency
+                "st": consistency_result.get("status"),
+                "sc": consistency_result.get("score", 0),
+                "lv": consistency_result.get("consistency_level"),
+                "fc": consistency_result.get("flips_count", 0),
+                "ct": consistency_result.get("confidence_trend")
+            },
+            "fd": {  # fluid_dynamics
+                "v": {  # venturi
+                    "cd": indicators.get("fluid_dynamics", {}).get("venturi", {}).get("compression_detected"),
+                    "cs": indicators.get("fluid_dynamics", {}).get("venturi", {}).get("compression_score"),
+                    "dir": indicators.get("fluid_dynamics", {}).get("venturi", {}).get("direction"),
+                    "bp": indicators.get("fluid_dynamics", {}).get("venturi", {}).get("breakout_probability")
+                },
+                "st": {  # self_trading
+                    "det": indicators.get("fluid_dynamics", {}).get("self_trading", {}).get("detected"),
+                    "pb": indicators.get("fluid_dynamics", {}).get("self_trading", {}).get("probability"),
+                    "tp": indicators.get("fluid_dynamics", {}).get("self_trading", {}).get("type")
+                }
+            },
+            # ===== NOUVELLES DONNÉES ML =====
+            "ob": {  # order_book
+                "br": round(ob_data.get("bid_ratio_pct", 50) / 100, 3),  # bid_ratio 0-1
+                "pr": ob_data.get("pressure"),  # pressure string
+                "im": round(ob_data.get("imbalance_ratio", 1), 2),  # imbalance
+                "sp": ob_data.get("spread_bps")  # spread in bps
+            },
+            "cvd": {  # cumulative volume delta
+                "st": cvd_data.get("status"),  # status
+                "ar": round(cvd_data.get("aggression_ratio", 1), 2),  # aggression_ratio
+                "d": cvd_data.get("cvd_delta")  # delta value
+            },
+            "vp": {  # volume_profile
+                "poc": vp_data.get("poc"),
+                "vah": vp_data.get("vah"),
+                "val": vp_data.get("val"),
+                "sh": vp_data.get("shape")  # shape
+            },
+            "fr": indicators.get("multi_exchange", {}).get("funding_divergence"),  # funding rate divergence
+            "oi": {  # open_interest
+                "t": indicators.get("open_interest", {}).get("amount"),  # total
+                "d1h": report.get("indicators", {}).get("open_interest", {}).get("delta", {}).get("1h", {}).get("delta_oi_pct"),
+                "d24h": report.get("indicators", {}).get("open_interest", {}).get("delta", {}).get("24h", {}).get("delta_oi_pct")
+            },
+            "macro": {  # cross-asset & macro
+                "fg": indicators.get("sentiment", {}).get("fear_greed", {}).get("value"),  # fear_greed index
+                "re": indicators.get("macro", {}).get("risk_environment", {}).get("environment"),  # risk env
+                "ex": indicators.get("multi_exchange", {}).get("exchanges_connected", 0)
+            },
+            "tech": {  # technical indicators
+                "kj": kdj_data.get("values", {}).get("j"),  # kdj J value
+                "ks": kdj_data.get("signal"),  # kdj signal
+                "adx": entropy_data.get("compression", {}).get("current"),  # compression proxy
+                "qs": entropy_data.get("quantum_state")  # quantum state
+            },
+            # Hyperliquid whale data
+            "hl": {
+                "ws": indicators.get("hyperliquid", {}).get("whale_analysis", {}).get("sentiment"),
+                "lr": indicators.get("hyperliquid", {}).get("whale_analysis", {}).get("long_ratio")
             }
         }
         data_store.save_signal(signal_record)
