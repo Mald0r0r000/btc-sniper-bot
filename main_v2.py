@@ -26,8 +26,7 @@ from analyzers import (
     OpenInterestAnalyzer,
     SelfTradingDetector,
     VenturiAnalyzer,
-    HyperliquidAnalyzer,
-    MACDAnalyzer
+    HyperliquidAnalyzer
 )
 from decision_engine_v2 import DecisionEngineV2
 from consistency_checker import ConsistencyChecker
@@ -201,13 +200,6 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         m2_emoji = "💧" if m2['offset_90d_trend'] == 'EXPANDING' else "🏜️" if m2['offset_90d_trend'] == 'CONTRACTING' else "➡️"
         print(f"      💰 M2 Supply: {m2_emoji} ${m2['current']:,.0f}B (YoY: {m2['yoy_change']:+.2f}%) | Offset Trend: {m2['offset_90d_trend']}")
     
-    # NEW: 3D MACD Analysis
-    macd_analyzer = MACDAnalyzer()
-    macd_result = macd_analyzer.analyze()
-    if macd_result.get('available'):
-        macd_emoji = "🟢" if macd_result['trend'] == 'BULLISH' else "🔴" if macd_result['trend'] == 'BEARISH' else "⚪"
-        print(f"   📈 MACD (3D): {macd_emoji} {macd_result['trend']} (Hist: {macd_result['hist']:.2f})")
-
     # NEW: Event Calendar Analysis (FOMC, CPI, NFP)
     from analyzers.event_calendar import EventCalendarAnalyzer
     event_analyzer = EventCalendarAnalyzer()
@@ -419,7 +411,8 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         candles_1h=candles_1h,  # Pour Smart Entry (Robustesse)
         venturi_data=venturi_result,  # Fluid dynamics - Venturi
         self_trading_data=self_trading_result,  # Fluid dynamics - Self-Trading
-        hyperliquid_data=hyperliquid_result  # Whale tracking sentiment
+        hyperliquid_data=hyperliquid_result,  # Whale tracking sentiment
+        macd_data=macd_result  # MACD 3D for HTF trend confirmation
     )
     
     decision_result = engine.generate_composite_signal()
@@ -498,8 +491,6 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
             },
             'entropy': entropy_result,
             'kdj': osc_result,  # New KDJ result
-            'adx': adx_result,  # New ADX result
-            'macd': macd_result,
             'multi_exchange': {
                 'exchanges_connected': multi_exchange_data.get('exchanges_connected', 0),
                 'vwap': multi_exchange_data.get('price_analysis', {}).get('vwap'),

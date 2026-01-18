@@ -198,7 +198,9 @@ class DecisionEngineV2:
         venturi_data: Dict = None,
         self_trading_data: Dict = None,
         # Hyperliquid whale data
-        hyperliquid_data: Dict = None
+        hyperliquid_data: Dict = None,
+        # MACD 3D (HTF trend confirmation)
+        macd_data: Dict = None
     ):
         self.price = current_price
         self.trading_style = trading_style
@@ -264,6 +266,9 @@ class DecisionEngineV2:
         
         # Hyperliquid data (whale tracking)
         self.hyperliquid = hyperliquid_data or {}
+        
+        # MACD 3D data
+        self.macd = macd_data or {}
     
     def _load_adaptive_weights(self) -> Dict[str, int]:
         """
@@ -517,11 +522,24 @@ class DecisionEngineV2:
              score += 5
         elif kdj_signal == 'DEAD_CROSS':
              score -= 5
-             
+        
+        # ========== ADX MULTIPLIER (Trend Strength Amplifier) ==========
+        # ADX doesn't tell direction, it tells confidence
+        # When ADX > 25, we're in a trend - amplify the signal
+        adx_value = self.adx.get('adx', 0)
+        adx_regime = self.adx.get('regime', 'RANGING')
+        
+        if adx_value > 25 and adx_regime == 'TRENDING':
+            # Calculate multiplier: caps at +20% amplification
+            mult = 1 + min((adx_value - 25) / 100, 0.2)
+            # Amplify deviation from neutral (50)
+            deviation = score - 50
+            score = 50 + (deviation * mult)
+            
         return max(0, min(100, score))
     
     def _score_structure(self) -> float:
-        """Score structure (FVG + Entropy)"""
+        """Score structure (FVG + Entropy + MACD 3D HTF)"""
         score = 50.0
         
         # Entropy / Quantum State
@@ -548,6 +566,17 @@ class DecisionEngineV2:
             distance = abs(nearest_bear.get('distance_pct', 100))
             if distance < 0.3:
                 score -= 10
+        
+        # ========== MACD 3D HTF CONFIRMATION ==========
+        # Higher timeframe trend context - confirms structural bias
+        macd_trend = self.macd.get('trend', 'NEUTRAL')
+        macd_available = self.macd.get('available', False)
+        
+        if macd_available:
+            if macd_trend == 'BULLISH':
+                score += 8  # HTF bullish confirmation
+            elif macd_trend == 'BEARISH':
+                score -= 8  # HTF bearish confirmation
         
         return max(0, min(100, score))
     
@@ -636,7 +665,7 @@ class DecisionEngineV2:
         return score
     
     def _score_macro(self) -> float:
-        """Score macro"""
+        """Score macro (cross-asset intelligence: DXY, M2, SPX)"""
         score = 50.0
         
         if not self.macro:
@@ -647,6 +676,38 @@ class DecisionEngineV2:
         
         # Risk-on = bullish for BTC
         score = risk_score
+        
+        # ========== CROSS-ASSET INTELLIGENCE ==========
+        # DXY (Dollar Index) - Inverse correlation with BTC
+        dxy = self.cross_asset.get('dxy', {})
+        dxy_change = dxy.get('daily_change', 0)
+        
+        if dxy_change > 1:
+            score -= 10  # Strong dollar = pressure on risk assets
+        elif dxy_change > 0.5:
+            score -= 5
+        elif dxy_change < -1:
+            score += 10  # Weak dollar = bullish for BTC
+        elif dxy_change < -0.5:
+            score += 5
+        
+        # M2 Money Supply (Liquidity) - 90-day lagged correlation
+        m2 = self.cross_asset.get('m2', {})
+        m2_trend = m2.get('offset_90d_trend', 'STABLE')
+        
+        if m2_trend == 'EXPANDING':
+            score += 5  # More liquidity = bullish long-term
+        elif m2_trend == 'CONTRACTING':
+            score -= 5  # Less liquidity = bearish pressure
+        
+        # SPX (Stock Market) - Risk-on/Risk-off proxy
+        spx = self.cross_asset.get('spx', {})
+        spx_change = spx.get('daily_change', 0)
+        
+        if spx_change > 1.5:
+            score += 5  # Strong risk-on environment
+        elif spx_change < -1.5:
+            score -= 5  # Risk-off, potential contagion
         
         return max(0, min(100, score))
     
