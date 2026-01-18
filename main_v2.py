@@ -517,12 +517,19 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
                 'iv_analysis': options_result.get('iv_analysis'),
                 'score': options_result.get('score')
             } if options_result else None,
-            'open_interest': oi_data,
+            'options': {
+                'max_pain': options_result.get('max_pain'),
+                'put_call_ratio': options_result.get('put_call_ratio'),
+                'iv_analysis': options_result.get('iv_analysis'),
+                'score': options_result.get('score')
+            } if options_result else None,
+            'open_interest': oi_analysis_result if mode == 'full' else oi_data, # Use full analysis result in full mode
             'fluid_dynamics': {
                 'venturi': venturi_result if venturi_result else None,
                 'self_trading': self_trading_result if self_trading_result else None
             },
-            'hyperliquid': hyperliquid_result if hyperliquid_result else None
+            'hyperliquid': hyperliquid_result if hyperliquid_result else None,
+            'cross_asset': cross_asset_result # Add cross_asset result explicitly
         }
     }
     

@@ -109,7 +109,7 @@ def run_scheduled_analysis() -> Dict[str, Any]:
         deriv_data = indicators.get("derivatives", {})
         
         # Extraire cross-asset data
-        cross_asset = {}
+        cross_asset = indicators.get("cross_asset", {})
         macro_indicators = indicators.get("macro", {})
         # Note: cross_asset_data is in market_context from decision engine
         market_ctx = report.get("market_context", {})
@@ -175,7 +175,7 @@ def run_scheduled_analysis() -> Dict[str, Any]:
             "cvd": {  # cumulative volume delta
                 "st": cvd_data.get("status"),  # status
                 "ar": round(cvd_data.get("aggression_ratio", 1), 2),  # aggression_ratio
-                "d": cvd_data.get("cvd_delta")  # delta value
+                "d": cvd_data.get("cvd_sum")  # delta value (CORRECTION: cvd_sum from analyzer)
             },
             "vp": {  # volume_profile
                 "poc": vp_data.get("poc"),
@@ -185,14 +185,18 @@ def run_scheduled_analysis() -> Dict[str, Any]:
             },
             "fr": indicators.get("multi_exchange", {}).get("funding_divergence"),  # funding rate divergence
             "oi": {  # open_interest
-                "t": indicators.get("open_interest", {}).get("amount"),  # total
-                "d1h": report.get("indicators", {}).get("open_interest", {}).get("delta", {}).get("1h", {}).get("delta_oi_pct"),
-                "d24h": report.get("indicators", {}).get("open_interest", {}).get("delta", {}).get("24h", {}).get("delta_oi_pct")
+                "t": indicators.get("open_interest", {}).get("total_oi_btc"),  # total (from analysis result)
+                "d1h": indicators.get("open_interest", {}).get("delta", {}).get("1h", {}).get("delta_oi_pct"),
+                "d24h": indicators.get("open_interest", {}).get("delta", {}).get("24h", {}).get("delta_oi_pct")
             },
             "macro": {  # cross-asset & macro
                 "fg": indicators.get("sentiment", {}).get("fear_greed", {}).get("value"),  # fear_greed index
                 "re": indicators.get("macro", {}).get("risk_environment", {}).get("environment"),  # risk env
-                "ex": indicators.get("multi_exchange", {}).get("exchanges_connected", 0)
+                "ex": indicators.get("multi_exchange", {}).get("exchanges_connected", 0),
+                # New Cross-Asset Data
+                "dxy": cross_asset.get("dxy", {}).get("value"),
+                "spx": cross_asset.get("spx", {}).get("value"),
+                "m2": cross_asset.get("m2", {}).get("current")
             },
             "tech": {  # technical indicators
                 "kj": kdj_data.get("values", {}).get("j"),  # kdj J value
