@@ -69,9 +69,12 @@ class BitgetConnector:
             # Direct API call to Bitget v2 endpoint
             import requests
             
+            # Clean symbol format: BTC/USDT:USDT -> BTCUSDT
+            clean_symbol = self.symbol.replace('/', '').split(':')[0]
+            
             url = "https://api.bitget.com/api/v2/mix/market/history-candles"
             params = {
-                'symbol': self.symbol.replace('/', ''),  # BTCUSDT format
+                'symbol': clean_symbol,
                 'granularity': granularity,
                 'limit': str(min(limit, 200)),
                 'productType': 'usdt-futures'
