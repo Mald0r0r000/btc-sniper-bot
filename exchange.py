@@ -80,7 +80,13 @@ class BitgetConnector:
                 'productType': 'usdt-futures'
             }
             
+            print(f"   🔍 Fetching {timeframe} candles from Bitget API...")
+            print(f"      URL: {url}")
+            print(f"      Params: {params}")
+            
             response = requests.get(url, params=params, timeout=10)
+            
+            print(f"      Status: {response.status_code}")
             
             if response.status_code != 200:
                 print(f"⚠️ Bitget API error ({response.status_code}): {response.text[:200]}")
@@ -88,8 +94,13 @@ class BitgetConnector:
             
             data = response.json()
             
+            print(f"      Response keys: {list(data.keys()) if data else 'None'}")
+            if data and 'data' in data:
+                print(f"      Candles received: {len(data['data'])}")
+            
             if not data or 'data' not in data or not data['data']:
                 print(f"⚠️ No history data returned for {timeframe}")
+                print(f"   Full response: {data}")
                 return pd.DataFrame()
             
             # Parse response - Bitget returns [timestamp, open, high, low, close, volume, usdtVolume]
