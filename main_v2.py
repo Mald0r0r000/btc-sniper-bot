@@ -175,6 +175,31 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     bias_emoji = "🟢" if htf_result['bias'] == 'BULLISH' else "🔴" if htf_result['bias'] == 'BEARISH' else "⚪"
     print(f"   📈 HTF Bias: {bias_emoji} {htf_result['bias']} (Structure: {htf_result['structure']} | Momentum: {htf_result['momentum']})")
     
+    # NEW: Cross-Asset Intelligence (DXY, SPX, M2)
+    from analyzers.cross_asset import CrossAssetAnalyzer
+    cross_asset_analyzer = CrossAssetAnalyzer()
+    cross_asset_result = cross_asset_analyzer.analyze()
+    
+    # Display macro data
+    regime_emoji = "🟢" if cross_asset_result['overall_regime'] == 'RISK_ON' else "🔴" if cross_asset_result['overall_regime'] == 'RISK_OFF' else "⚪"
+    print(f"   🌍 Macro Regime: {regime_emoji} {cross_asset_result['overall_regime']} ({cross_asset_result['bullish_indicators']} Bull / {cross_asset_result['bearish_indicators']} Bear)")
+    
+    dxy = cross_asset_result.get('dxy', {})
+    if dxy.get('available'):
+        dxy_emoji = "📈" if dxy['trend'] == 'BULLISH' else "📉" if dxy['trend'] == 'BEARISH' else "➡️"
+        print(f"      💵 DXY: {dxy_emoji} {dxy['value']} ({dxy['change_24h']:+.2f}%) → BTC {dxy['btc_impact']}")
+    
+    spx = cross_asset_result.get('spx', {})
+    if spx.get('available'):
+        spx_emoji = "📈" if spx['trend'] == 'BULLISH' else "📉" if spx['trend'] == 'BEARISH' else "➡️"
+        market_status = "🔴 Closed" if not spx['market_open'] else "🟢 Open"
+        print(f"      📊 S&P500: {spx_emoji} {spx['value']:,.0f} ({spx['change_24h']:+.2f}%) | {market_status}")
+    
+    m2 = cross_asset_result.get('m2', {})
+    if m2.get('available'):
+        m2_emoji = "💧" if m2['offset_90d_trend'] == 'EXPANDING' else "🏜️" if m2['offset_90d_trend'] == 'CONTRACTING' else "➡️"
+        print(f"      💰 M2 Supply: {m2_emoji} ${m2['current']:,.0f}B (YoY: {m2['yoy_change']:+.2f}%) | Offset Trend: {m2['offset_90d_trend']}")
+    
     # ==========================================
     # 4. ANALYSES AVANCÉES (mode full)
     # ==========================================
@@ -358,6 +383,7 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         kdj_data=osc_result,  # KDJ Oscillator
         adx_data=adx_result,  # ADX Market Regime
         htf_data=htf_result,  # HTF Bias
+        cross_asset_data=cross_asset_result,  # DXY, SPX, M2
         multi_exchange_data=multi_exchange_data,
         spoofing_data=spoofing_result,
         derivatives_data=derivatives_result,

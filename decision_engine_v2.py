@@ -166,6 +166,7 @@ class DecisionEngineV2:
         kdj_data: Dict = None,
         adx_data: Dict = None,
         htf_data: Dict = None,
+        cross_asset_data: Dict = None,
         # Données multi-exchange
         multi_exchange_data: Dict = None,
         # Données manipulation
@@ -227,6 +228,7 @@ class DecisionEngineV2:
         self.kdj = kdj_data or {}
         self.adx = adx_data or {}
         self.htf = htf_data or {}
+        self.cross_asset = cross_asset_data or {}
         
         # Advanced data
         self.multi_ex = multi_exchange_data or {}
@@ -407,6 +409,21 @@ class DecisionEngineV2:
             elif direction == SignalDirection.SHORT and bearish_dims < 3:
                 signal_type = SignalType.NO_SIGNAL
                 direction = SignalDirection.NEUTRAL
+        
+        # Filter 6: Macro Regime Check (Phase 2 - Cross-Asset)
+        macro_regime = self.cross_asset.get('overall_regime', 'MIXED')
+        macro_btc_impact = self.cross_asset.get('regime_btc_impact', 'NEUTRAL')
+        macro_penalty = 0
+        
+        if signal_type not in [SignalType.NO_SIGNAL]:
+            is_long_signal = direction == SignalDirection.LONG
+            
+            if macro_regime == 'RISK_OFF' and is_long_signal:
+                macro_penalty = 15  # Going long in risk-off environment
+            elif macro_regime == 'RISK_ON' and not is_long_signal and direction != SignalDirection.NEUTRAL:
+                macro_penalty = 15  # Going short in risk-on environment
+                
+            adjusted_score -= macro_penalty
         
         # 6c. Générer les détails du signal
         signal = self._build_composite_signal(
