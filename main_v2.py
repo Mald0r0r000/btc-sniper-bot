@@ -200,6 +200,18 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         m2_emoji = "💧" if m2['offset_90d_trend'] == 'EXPANDING' else "🏜️" if m2['offset_90d_trend'] == 'CONTRACTING' else "➡️"
         print(f"      💰 M2 Supply: {m2_emoji} ${m2['current']:,.0f}B (YoY: {m2['yoy_change']:+.2f}%) | Offset Trend: {m2['offset_90d_trend']}")
     
+    # NEW: Event Calendar Analysis (FOMC, CPI, NFP)
+    from analyzers.event_calendar import EventCalendarAnalyzer
+    event_analyzer = EventCalendarAnalyzer()
+    event_result = event_analyzer.analyze()
+    
+    if event_result.get('event_active'):
+        print(f"   ⚠️ EVENT ACTIF: {event_result['current_event']} ({event_result['time_to_event']}) | Impact: {event_result['impact_level']} | -${event_result['confidence_penalty']} pts")
+    else:
+        next_event = event_result.get('next_event')
+        if next_event:
+            print(f"   📅 Prochain Event: {next_event} dans {event_result['next_event_in']} ({event_result['next_event_time_paris']} Paris)")
+    
     # ==========================================
     # 4. ANALYSES AVANCÉES (mode full)
     # ==========================================
@@ -384,6 +396,7 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         adx_data=adx_result,  # ADX Market Regime
         htf_data=htf_result,  # HTF Bias
         cross_asset_data=cross_asset_result,  # DXY, SPX, M2
+        event_data=event_result,  # FOMC, CPI, NFP events
         multi_exchange_data=multi_exchange_data,
         spoofing_data=spoofing_result,
         derivatives_data=derivatives_result,

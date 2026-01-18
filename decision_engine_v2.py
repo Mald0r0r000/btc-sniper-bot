@@ -167,6 +167,7 @@ class DecisionEngineV2:
         adx_data: Dict = None,
         htf_data: Dict = None,
         cross_asset_data: Dict = None,
+        event_data: Dict = None,
         # Données multi-exchange
         multi_exchange_data: Dict = None,
         # Données manipulation
@@ -229,6 +230,7 @@ class DecisionEngineV2:
         self.adx = adx_data or {}
         self.htf = htf_data or {}
         self.cross_asset = cross_asset_data or {}
+        self.event = event_data or {}
         
         # Advanced data
         self.multi_ex = multi_exchange_data or {}
@@ -424,6 +426,12 @@ class DecisionEngineV2:
                 macro_penalty = 15  # Going short in risk-on environment
                 
             adjusted_score -= macro_penalty
+        
+        # Filter 7: Event Calendar (Phase 3 - Avoid FOMC/CPI/NFP volatility)
+        if self.event.get('event_active') and signal_type not in [SignalType.NO_SIGNAL]:
+            event_penalty = self.event.get('confidence_penalty', 30)
+            adjusted_score -= event_penalty
+            # Event warning will be added in _build_composite_signal
         
         # 6c. Générer les détails du signal
         signal = self._build_composite_signal(
