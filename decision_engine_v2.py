@@ -164,6 +164,8 @@ class DecisionEngineV2:
         fvg_data: Dict = None,
         entropy_data: Dict = None,
         kdj_data: Dict = None,
+        adx_data: Dict = None,
+        htf_data: Dict = None,
         # Données multi-exchange
         multi_exchange_data: Dict = None,
         # Données manipulation
@@ -223,6 +225,8 @@ class DecisionEngineV2:
         self.fvg = fvg_data or {}
         self.entropy = entropy_data or {}
         self.kdj = kdj_data or {}
+        self.adx = adx_data or {}
+        self.htf = htf_data or {}
         
         # Advanced data
         self.multi_ex = multi_exchange_data or {}
@@ -365,6 +369,42 @@ class DecisionEngineV2:
         if self.consistency_status == 'NEUTRAL' and self.consistency_score < -15:
             # Check if it's a tradeable signal being downgraded
             if signal_type not in [SignalType.NO_SIGNAL]:
+                signal_type = SignalType.NO_SIGNAL
+                direction = SignalDirection.NEUTRAL
+        
+        # ========== PHASE 1: INSTITUTIONAL GRADE FILTERS ==========
+        
+        # Filter 3: ADX Market Regime (Block signals in dead/ranging markets)
+        adx_regime = self.adx.get('regime', 'UNKNOWN')
+        if adx_regime == 'RANGING' and signal_type not in [SignalType.NO_SIGNAL]:
+            # Market is dead, no clear trend - block all signals
+            signal_type = SignalType.NO_SIGNAL
+            direction = SignalDirection.NEUTRAL
+        
+        # Filter 4: HTF Alignment (Reduce confidence if trading against major trend)
+        htf_bias = self.htf.get('bias', 'NEUTRAL')
+        htf_penalty = 0
+        if htf_bias != 'NEUTRAL' and signal_type not in [SignalType.NO_SIGNAL]:
+            # Check alignment
+            is_long_signal = direction == SignalDirection.LONG
+            is_htf_bullish = htf_bias == 'BULLISH'
+            
+            if is_long_signal and not is_htf_bullish:
+                htf_penalty = 20  # Going long against bearish HTF
+            elif not is_long_signal and is_htf_bullish:
+                htf_penalty = 20  # Going short against bullish HTF
+                
+            adjusted_score -= htf_penalty
+        
+        # Filter 5: Confluence Check (Require 3+ dimensions aligned)
+        if signal_type not in [SignalType.NO_SIGNAL]:
+            bullish_dims = sum(1 for score in dimension_scores.values() if score > 55)
+            bearish_dims = sum(1 for score in dimension_scores.values() if score < 45)
+            
+            if direction == SignalDirection.LONG and bullish_dims < 3:
+                signal_type = SignalType.NO_SIGNAL
+                direction = SignalDirection.NEUTRAL
+            elif direction == SignalDirection.SHORT and bearish_dims < 3:
                 signal_type = SignalType.NO_SIGNAL
                 direction = SignalDirection.NEUTRAL
         

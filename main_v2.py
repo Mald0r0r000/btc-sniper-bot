@@ -153,6 +153,28 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     kdj = osc_result.get('values', {})
     print(f"   🌊 KDJ (1H): {osc_result['signal']} (J={kdj.get('j', 0):.1f} | Dev={kdj.get('deviation', 0):.1f}) | Score: {osc_result['score']}")
     
+    # NEW: ADX Market Regime Analysis (1H)
+    from analyzers.adx_analyzer import ADXAnalyzer
+    adx_analyzer = ADXAnalyzer(
+        high=df_meso['high'],
+        low=df_meso['low'],
+        close=df_meso['close']
+    )
+    adx_result = adx_analyzer.analyze()
+    regime_emoji = "🔴" if adx_result['regime'] == 'RANGING' else "🟡" if adx_result['regime'] == 'TRANSITION' else "🟢"
+    print(f"   📊 ADX (1H): {regime_emoji} {adx_result['regime']} (ADX={adx_result['adx']:.1f}) | Trend: {adx_result['trend_direction']}")
+    
+    # NEW: HTF Bias Analysis (4H approximated via longer lookback on 1H)
+    from analyzers.htf_bias import HTFBiasAnalyzer
+    htf_analyzer = HTFBiasAnalyzer(
+        high=df_meso['high'],
+        low=df_meso['low'],
+        close=df_meso['close']
+    )
+    htf_result = htf_analyzer.analyze()
+    bias_emoji = "🟢" if htf_result['bias'] == 'BULLISH' else "🔴" if htf_result['bias'] == 'BEARISH' else "⚪"
+    print(f"   📈 HTF Bias: {bias_emoji} {htf_result['bias']} (Structure: {htf_result['structure']} | Momentum: {htf_result['momentum']})")
+    
     # ==========================================
     # 4. ANALYSES AVANCÉES (mode full)
     # ==========================================
@@ -334,6 +356,8 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         fvg_data=fvg_result,
         entropy_data=entropy_result,
         kdj_data=osc_result,  # KDJ Oscillator
+        adx_data=adx_result,  # ADX Market Regime
+        htf_data=htf_result,  # HTF Bias
         multi_exchange_data=multi_exchange_data,
         spoofing_data=spoofing_result,
         derivatives_data=derivatives_result,
