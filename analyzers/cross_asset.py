@@ -84,12 +84,12 @@ class CrossAssetAnalyzer:
         if data is None or len(data) < 2:
             return default
             
-        current = float(data['Close'].iloc[-1])
-        prev = float(data['Close'].iloc[-2])
+        current = data['Close'].iloc[-1].item()
+        prev = data['Close'].iloc[-2].item()
         change = ((current - prev) / prev) * 100
         
         # 5-day trend
-        first = float(data['Close'].iloc[0])
+        first = data['Close'].iloc[0].item()
         trend_pct = ((current - first) / first) * 100
         
         if trend_pct > 0.5:
@@ -125,8 +125,8 @@ class CrossAssetAnalyzer:
         if data is None or len(data) < 2:
             return default
             
-        current = float(data['Close'].iloc[-1])
-        prev = float(data['Close'].iloc[-2])
+        current = data['Close'].iloc[-1].item()
+        prev = data['Close'].iloc[-2].item()
         change = ((current - prev) / prev) * 100
         
         # Check if market is open (rough check based on last data timestamp)
@@ -139,7 +139,7 @@ class CrossAssetAnalyzer:
             market_open = False
         
         # 5-day trend
-        first = float(data['Close'].iloc[0])
+        first = data['Close'].iloc[0].item()
         trend_pct = ((current - first) / first) * 100
         
         if trend_pct > 1.0:
