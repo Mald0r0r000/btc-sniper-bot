@@ -60,6 +60,7 @@ class BitgetConnector:
         try:
             from datetime import datetime, timedelta
             import time
+            import requests
             
             # Map timeframe to Bitget granularity format
             # Note: Bitget limits historical data to 90 days per request
