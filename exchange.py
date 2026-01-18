@@ -44,6 +44,62 @@ class BitgetConnector:
             print(f"❌ Erreur fetch_ohlcv ({timeframe}): {e}")
             return pd.DataFrame()
     
+    def fetch_history_candles(self, timeframe: str, limit: int = 200) -> pd.DataFrame:
+        """
+        Récupère les données OHLCV historiques via l'API history-candles
+        Supporte jusqu'à 200 bougies pour toutes les timeframes incluant 3D
+        
+        Args:
+            timeframe: Intervalle (1m, 5m, 1h, 1d, 3d, etc.)
+            limit: Nombre de bougies (max 200)
+            
+        Returns:
+            DataFrame avec colonnes: timestamp, open, high, low, close, volume
+        """
+        try:
+            # Map timeframe to Bitget granularity format
+            granularity_map = {
+                '1m': '1m', '5m': '5m', '15m': '15m', '30m': '30m',
+                '1h': '1H', '4h': '4H', '6h': '6H', '12h': '12H',
+                '1d': '1D', '3d': '3D', '1w': '1W'
+            }
+            
+            granularity = granularity_map.get(timeframe, timeframe)
+            
+            # Use ccxt's private API call
+            params = {
+                'symbol': self.symbol,
+                'granularity': granularity,
+                'limit': min(limit, 200)
+            }
+            
+            # Bitget futures history endpoint
+            response = self.exchange.contractPublicGetMixV1MarketHistoryCandles(params)
+            
+            if not response or 'data' not in response:
+                print(f"⚠️ No history data returned for {timeframe}")
+                return pd.DataFrame()
+            
+            # Parse response - Bitget returns [timestamp, open, high, low, close, volume, ...]
+            candles = response['data']
+            df = pd.DataFrame(candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'usdtVolume'])
+            
+            # Convert to proper types
+            df['timestamp'] = pd.to_datetime(df['timestamp'].astype(int), unit='ms', utc=True)
+            df['open'] = df['open'].astype(float)
+            df['high'] = df['high'].astype(float)
+            df['low'] = df['low'].astype(float)
+            df['close'] = df['close'].astype(float)
+            df['volume'] = df['volume'].astype(float)
+            
+            # Drop extra column and sort chronologically
+            df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']].sort_values('timestamp')
+            
+            return df
+        except Exception as e:
+            print(f"❌ Erreur fetch_history_candles ({timeframe}): {e}")
+            return pd.DataFrame()
+    
     def fetch_order_book(self, limit: int = 50) -> Dict[str, List]:
         """
         Récupère le carnet d'ordres

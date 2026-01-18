@@ -5,7 +5,7 @@ from exchange import BitgetConnector
 
 class MACDAnalyzer:
     """
-    Analyzes MACD on the 3D timeframe using native Bitget candles.
+    Analyzes MACD on the 3D timeframe using Bitget's historical candle API.
     """
 
     def __init__(self):
@@ -18,22 +18,23 @@ class MACDAnalyzer:
 
     def analyze(self) -> Dict[str, Any]:
         """
-        Fetches 3D candles and calculates MACD.
+        Fetches 3D candles and calculates MACD using Bitget's historical API.
         Returns:
             Dict containing MACD values, histogram, and trend interpretation.
         """
         try:
-            # Fetch 3D candles (need enough for slow MA + signal)
-            # 26 + 9 + buffer = ~50 candles
-            df = self.connector.fetch_ohlcv(self.timeframe, limit=100)
+            # Use Bitget's history API which supports up to 200 3D candles
+            df = self.connector.fetch_history_candles(self.timeframe, limit=200)
             
             if df is None or df.empty or len(df) < 50:
-                print(f"   ⚠️ Not enough 3D candles for MACD: {len(df) if df is not None else 0}")
+                print(f"   ❌ Not enough 3D candles for MACD: {len(df) if df is not None else 0}")
                 return {
                     'macd': 0, 'signal': 0, 'hist': 0,
                     'trend': 'NEUTRAL', 'strength': 0,
                     'available': False
                 }
+
+            print(f"   ✅ Fetched {len(df)} 3D candles for MACD calculation")
 
             # Calculate MACD manually using pandas EMA
             # MACD = 12-EMA - 26-EMA
