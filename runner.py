@@ -116,6 +116,7 @@ def run_scheduled_analysis() -> Dict[str, Any]:
         
         # Extraire les indicateurs techniques
         kdj_data = indicators.get("kdj", {})
+        adx_data = indicators.get("adx", {})
         
         # Extraire OHLCV snapshot (5 dernières bougies via candles in decision engine data)
         # Ces données sont dans le report mais pas directement - on utilise les données d'entropy
@@ -206,8 +207,11 @@ def run_scheduled_analysis() -> Dict[str, Any]:
             "tech": {  # technical indicators
                 "kj": kdj_data.get("values", {}).get("j"),  # kdj J value
                 "ks": kdj_data.get("signal"),  # kdj signal
-                "adx": entropy_data.get("compression", {}).get("current"),  # compression proxy
-                "qs": entropy_data.get("quantum_state")  # quantum state
+                "cmp": entropy_data.get("compression", {}).get("current"),  # compression
+                "qs": entropy_data.get("quantum_state"),  # quantum state
+                "adx": adx_data.get("adx"),  # real ADX value
+                "atr": adx_data.get("atr"),  # ATR
+                "reg": adx_data.get("regime")  # ADX Regime
             },
             # Hyperliquid whale data
             "hl": {
