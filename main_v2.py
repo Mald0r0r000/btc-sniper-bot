@@ -537,6 +537,8 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
                 'score': options_result.get('score')
             } if options_result else None,
             'open_interest': oi_analysis_result if mode == 'full' else oi_data, # Use full analysis result in full mode
+            'adx': adx_result,  # ADX market regime data
+            'macd': macd_result,  # MACD 3D data
             'fluid_dynamics': {
                 'venturi': venturi_result if venturi_result else None,
                 'self_trading': self_trading_result if self_trading_result else None
