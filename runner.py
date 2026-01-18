@@ -196,7 +196,12 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 # New Cross-Asset Data
                 "dxy": cross_asset.get("dxy", {}).get("value"),
                 "spx": cross_asset.get("spx", {}).get("value"),
-                "m2": cross_asset.get("m2", {}).get("current")
+                "m2": {
+                    "v": cross_asset.get("m2", {}).get("current"),  # Value ($B)
+                    "yoy": cross_asset.get("m2", {}).get("yoy_change"),  # Year-over-Year change (%)
+                    "off": cross_asset.get("m2", {}).get("offset_90d_trend"),  # 90-day offset trend
+                    "imp": cross_asset.get("m2", {}).get("btc_impact")  # Impact
+                }
             },
             "tech": {  # technical indicators
                 "kj": kdj_data.get("values", {}).get("j"),  # kdj J value
