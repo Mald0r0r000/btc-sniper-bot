@@ -26,7 +26,8 @@ from analyzers import (
     OpenInterestAnalyzer,
     SelfTradingDetector,
     VenturiAnalyzer,
-    HyperliquidAnalyzer
+    HyperliquidAnalyzer,
+    MACDAnalyzer
 )
 from decision_engine_v2 import DecisionEngineV2
 from consistency_checker import ConsistencyChecker
@@ -224,6 +225,17 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     venturi_result = {}
     self_trading_result = {}
     hyperliquid_result = {}
+    macd_result = {}  # MACD 3D (initialized before mode check)
+    
+    # MACD 3D Analysis (always run - needed for scoring)
+    try:
+        macd_analyzer = MACDAnalyzer()
+        macd_result = macd_analyzer.analyze()
+        if macd_result.get('available'):
+            macd_emoji = "🟢" if macd_result['trend'] == 'BULLISH' else "🔴" if macd_result['trend'] == 'BEARISH' else "⚪"
+            print(f"   📈 MACD (3D): {macd_emoji} {macd_result['trend']} (Hist: {macd_result['hist']:.2f})")
+    except Exception as e:
+        print(f"   ⚠️ MACD analysis failed: {e}")
     
     if mode == 'full':
         print("\n🔬 Analyse des indicateurs avancés...")
