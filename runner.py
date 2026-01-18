@@ -117,6 +117,7 @@ def run_scheduled_analysis() -> Dict[str, Any]:
         # Extraire les indicateurs techniques
         kdj_data = indicators.get("kdj", {})
         adx_data = indicators.get("adx", {})
+        macd_data = indicators.get("macd", {})
         
         # Extraire OHLCV snapshot (5 dernières bougies via candles in decision engine data)
         # Ces données sont dans le report mais pas directement - on utilise les données d'entropy
@@ -207,17 +208,18 @@ def run_scheduled_analysis() -> Dict[str, Any]:
             "tech": {  # technical indicators
                 "kj": kdj_data.get("values", {}).get("j"),  # kdj J value
                 "ks": kdj_data.get("signal"),  # kdj signal
-                "cmp": entropy_data.get("compression", {}).get("current"),  # compression
+                "cmp": entropy_data.get("compression", {}).get("current"),  # compression (fixed key name)
                 "qs": entropy_data.get("quantum_state"),  # quantum state
-                "adx": adx_data.get("adx"),  # real ADX value
-                "atr": adx_data.get("atr"),  # ATR
-                "reg": adx_data.get("regime"),  # ADX Regime
+                # ADX data (from adx_data)
+                "adx": adx_data.get("adx"),  # ADX value
+                "reg": adx_data.get("regime"),  # ADX regime (TRENDING/RANGING/TRANSITION)
+                # MACD 3D data (from macd_data)
                 "mcd": {
-                    "h": indicators.get("macd", {}).get("hist"),
-                    "s": indicators.get("macd", {}).get("signal"),
-                    "v": indicators.get("macd", {}).get("macd"),
-                    "t": indicators.get("macd", {}).get("trend")
-                }
+                    "h": macd_data.get("hist"),  # MACD histogram
+                    "s": macd_data.get("signal"),  # MACD signal line
+                    "v": macd_data.get("macd"),  # MACD value
+                    "t": macd_data.get("trend")  # MACD trend (BULLISH/BEARISH/NEUTRAL)
+                } if macd_data.get("available") else None
             },
             # Hyperliquid whale data
             "hl": {
