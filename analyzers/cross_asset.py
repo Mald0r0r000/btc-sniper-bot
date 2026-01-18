@@ -198,13 +198,18 @@ class CrossAssetAnalyzer:
             year_ago = m2_data.iloc[-13] if len(m2_data) >= 13 else m2_data.iloc[0]
             yoy_change = ((current - year_ago) / year_ago) * 100
             
-            # 90-day offset analysis: Compare M2 from 3 months ago to 4 months ago
-            # This represents the "liquidity wave" that should be hitting BTC now
+            # 60-95 day offset analysis: Compare M2 from 2-3 months ago to 3-4 months ago
+            # This represents the "liquidity wave" hitting BTC now (60-95 day lag)
             if len(m2_data) >= 5:
-                m2_3m_ago = m2_data.iloc[-4]  # ~3 months ago
-                m2_4m_ago = m2_data.iloc[-5]  # ~4 months ago
+                # M2 data is monthly, so:
+                # -3 = ~2 months ago (~60 days)
+                # -4 = ~3 months ago (~90 days)
+                # -5 = ~4 months ago (~120 days)
+                # We average the 2-3 month window and compare to 3-4 month window
+                m2_recent = (m2_data.iloc[-3] + m2_data.iloc[-4]) / 2  # 60-90 day avg
+                m2_previous = (m2_data.iloc[-4] + m2_data.iloc[-5]) / 2  # 90-120 day avg
                 
-                offset_change = ((m2_3m_ago - m2_4m_ago) / m2_4m_ago) * 100
+                offset_change = ((m2_recent - m2_previous) / m2_previous) * 100
                 
                 if offset_change > 0.5:
                     offset_trend = 'EXPANDING'
@@ -220,8 +225,8 @@ class CrossAssetAnalyzer:
                 btc_impact = 'NEUTRAL'
                 
             return {
-                'current': float(round(current, 1)),
-                'yoy_change': float(round(yoy_change, 2)),
+                'current': round(current, 1),
+                'yoy_change': round(yoy_change, 2),
                 'offset_90d_trend': offset_trend,
                 'btc_impact': btc_impact,
                 'available': True
