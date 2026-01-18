@@ -211,7 +211,13 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 "qs": entropy_data.get("quantum_state"),  # quantum state
                 "adx": adx_data.get("adx"),  # real ADX value
                 "atr": adx_data.get("atr"),  # ATR
-                "reg": adx_data.get("regime")  # ADX Regime
+                "reg": adx_data.get("regime"),  # ADX Regime
+                "mcd": {
+                    "h": indicators.get("macd", {}).get("hist"),
+                    "s": indicators.get("macd", {}).get("signal"),
+                    "v": indicators.get("macd", {}).get("macd"),
+                    "t": indicators.get("macd", {}).get("trend")
+                }
             },
             # Hyperliquid whale data
             "hl": {
