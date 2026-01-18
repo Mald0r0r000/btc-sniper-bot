@@ -47,19 +47,23 @@ class BitgetConnector:
     def fetch_history_candles(self, timeframe: str, limit: int = 200) -> pd.DataFrame:
         """
         Récupère les données OHLCV historiques via l'API history-candles
-        Supporte jusqu'à 200 bougies pour toutes les timeframes incluant 3D
+        Supporte jusqu'à 200 bougies, mais Bitget limite à 90 jours max par requête
+        Pour obtenir plus de données, on fait plusieurs requêtes avec pagination
         
         Args:
             timeframe: Intervalle (1m, 5m, 1h, 1d, 3d, etc.)
-            limit: Nombre de bougies (max 200)
+            limit: Nombre de bougies souhaité (max 200)
             
         Returns:
             DataFrame avec colonnes: timestamp, open, high, low, close, volume
         """
         try:
+            from datetime import datetime, timedelta
+            import time
+            
             # Map timeframe to Bitget granularity format
-            # Note: Bitget limits historical data to 90 days
-            # For 3D candles: 30 candles × 3 days = 90 days (max reached)
+            # Note: Bitget limits historical data to 90 days per request
+            # For 3D candles: 30 candles × 3 days = 90 days
             granularity_map = {
                 '1m': '1m', '5m': '5m', '15m': '15m', '30m': '30m',
                 '1h': '1H', '4h': '4H', '6h': '6H', '12h': '12H',
@@ -68,46 +72,67 @@ class BitgetConnector:
             
             granularity = granularity_map.get(timeframe, timeframe)
             
-            # Direct API call to Bitget v2 endpoint
-            import requests
-            
             # Clean symbol format: BTC/USDT:USDT -> BTCUSDT
             clean_symbol = self.symbol.replace('/', '').split(':')[0]
             
-            url = "https://api.bitget.com/api/v2/mix/market/history-candles"
-            params = {
-                'symbol': clean_symbol,
-                'granularity': granularity,
-                'limit': str(min(limit, 200)),
-                'productType': 'usdt-futures'
-            }
+            # Calculate how many requests needed based on 90-day limit
+            # For 3D: each batch = 30 candles, so 3 batches = 90 candles
+            candles_per_batch = 30 if timeframe == '3d' else 200
+            num_batches = min((limit + candles_per_batch - 1) // candles_per_batch, 10)  # Max 10 batches
             
-            print(f"   🔍 Fetching {timeframe} candles from Bitget API...")
-            print(f"      URL: {url}")
-            print(f"      Params: {params}")
+            all_candles = []
+            current_end_time = int(datetime.now(timezone.utc).timestamp() * 1000)
             
-            response = requests.get(url, params=params, timeout=10)
+            print(f"   🔍 Fetching {timeframe} candles from Bitget API ({num_batches} batches)...")
             
-            print(f"      Status: {response.status_code}")
+            for batch_num in range(num_batches):
+                url = "https://api.bitget.com/api/v2/mix/market/history-candles"
+                params = {
+                    'symbol': clean_symbol,
+                    'granularity': granularity,
+                    'limit': str(200),
+                    'productType': 'usdt-futures',
+                    'endTime': str(current_end_time)
+                }
+                
+                print(f"      Batch {batch_num + 1}/{num_batches}: endTime={current_end_time}")
+                
+                response = requests.get(url, params=params, timeout=10)
+                
+                if response.status_code != 200:
+                    print(f"      ⚠️ API error ({response.status_code}): {response.text[:100]}")
+                    break
+                
+                data = response.json()
+                
+                if not data or 'data' not in data or not data['data']:
+                    print(f"      ⚠️ No more data available")
+                    break
+                
+                batch_candles = data['data']
+                print(f"      ✅ Received {len(batch_candles)} candles")
+                
+                all_candles.extend(batch_candles)
+                
+                # Update end_time to the timestamp of the oldest candle in this batch
+                # Subtract 1ms to avoid duplicate
+                oldest_timestamp = int(batch_candles[-1][0])
+                current_end_time = oldest_timestamp - 1
+                
+                # Small delay to respect rate limits
+                if batch_num < num_batches - 1:
+                    time.sleep(0.1)
+                
+                # Stop if we got fewer candles than expected (reached the end)
+                if len(batch_candles) < candles_per_batch:
+                    break
             
-            if response.status_code != 200:
-                print(f"⚠️ Bitget API error ({response.status_code}): {response.text[:200]}")
+            if not all_candles:
+                print(f"      ❌ No candles fetched")
                 return pd.DataFrame()
             
-            data = response.json()
-            
-            print(f"      Response keys: {list(data.keys()) if data else 'None'}")
-            if data and 'data' in data:
-                print(f"      Candles received: {len(data['data'])}")
-            
-            if not data or 'data' not in data or not data['data']:
-                print(f"⚠️ No history data returned for {timeframe}")
-                print(f"   Full response: {data}")
-                return pd.DataFrame()
-            
-            # Parse response - Bitget returns [timestamp, open, high, low, close, volume, usdtVolume]
-            candles = data['data']
-            df = pd.DataFrame(candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'usdtVolume'])
+            # Parse and combine all candles
+            df = pd.DataFrame(all_candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume', 'usdtVolume'])
             
             # Convert to proper types
             df['timestamp'] = pd.to_datetime(df['timestamp'].astype(int), unit='ms', utc=True)
@@ -117,10 +142,13 @@ class BitgetConnector:
             df['close'] = df['close'].astype(float)
             df['volume'] = df['volume'].astype(float)
             
-            # Drop extra column and sort chronologically
-            df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']].sort_values('timestamp')
+            # Drop extra column, remove duplicates, and sort chronologically
+            df = df[['timestamp', 'open', 'high', 'low', 'close', 'volume']].drop_duplicates('timestamp').sort_values('timestamp')
+            
+            print(f"      📊 Total: {len(df)} unique candles fetched")
             
             return df
+            
         except Exception as e:
             print(f"❌ Erreur fetch_history_candles ({timeframe}): {e}")
             return pd.DataFrame()

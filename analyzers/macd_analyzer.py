@@ -23,11 +23,11 @@ class MACDAnalyzer:
             Dict containing MACD values, histogram, and trend interpretation.
         """
         try:
-            # Use Bitget's history API which supports up to 200 3D candles
-            # Note: Bitget actually limits 3D candles to ~30 in practice
-            df = self.connector.fetch_history_candles(self.timeframe, limit=200)
+            # Use Bitget's history API with pagination to get more candles
+            # Request 100 candles, pagination will fetch ~3-4 batches
+            df = self.connector.fetch_history_candles(self.timeframe, limit=100)
             
-            # 30 candles is sufficient for MACD (26 slow + signal period)
+            # We should get 60-90 candles with pagination
             if df is None or df.empty or len(df) < 30:
                 print(f"   ❌ Not enough 3D candles for MACD: {len(df) if df is not None else 0}")
                 return {
