@@ -66,15 +66,16 @@ class BitgetConnector:
             
             granularity = granularity_map.get(timeframe, timeframe)
             
-            # Use ccxt's private API call
+            # Use ccxt's API call for Bitget v2 history endpoint
             params = {
-                'symbol': self.symbol,
+                'symbol': self.symbol.replace('/', ''),  # BTCUSDT format
                 'granularity': granularity,
-                'limit': min(limit, 200)
+                'limit': str(min(limit, 200)),
+                'productType': 'usdt-futures'
             }
             
-            # Bitget futures history endpoint
-            response = self.exchange.contractPublicGetMixV1MarketHistoryCandles(params)
+            # Bitget futures v2 history endpoint
+            response = self.exchange.contractPublicGetMixV2MarketHistoryCandles(params)
             
             if not response or 'data' not in response:
                 print(f"⚠️ No history data returned for {timeframe}")
