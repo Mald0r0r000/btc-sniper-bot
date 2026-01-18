@@ -58,6 +58,8 @@ class BitgetConnector:
         """
         try:
             # Map timeframe to Bitget granularity format
+            # Note: Bitget limits historical data to 90 days
+            # For 3D candles: 30 candles × 3 days = 90 days (max reached)
             granularity_map = {
                 '1m': '1m', '5m': '5m', '15m': '15m', '30m': '30m',
                 '1h': '1H', '4h': '4H', '6h': '6H', '12h': '12H',

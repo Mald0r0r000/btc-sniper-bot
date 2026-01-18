@@ -24,9 +24,11 @@ class MACDAnalyzer:
         """
         try:
             # Use Bitget's history API which supports up to 200 3D candles
+            # Note: Bitget actually limits 3D candles to ~30 in practice
             df = self.connector.fetch_history_candles(self.timeframe, limit=200)
             
-            if df is None or df.empty or len(df) < 50:
+            # 30 candles is sufficient for MACD (26 slow + signal period)
+            if df is None or df.empty or len(df) < 30:
                 print(f"   ❌ Not enough 3D candles for MACD: {len(df) if df is not None else 0}")
                 return {
                     'macd': 0, 'signal': 0, 'hist': 0,
