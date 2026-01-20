@@ -405,15 +405,22 @@ class DecisionEngineV2:
                 
             adjusted_score -= htf_penalty
         
-        # Filter 5: Confluence Check (Require 3+ dimensions aligned)
+        # Filter 5: Confluence Check (Asymmetric thresholds)
+        # LONG: Require 3+ dimensions > 55
+        # SHORT: Require 2+ dimensions < 45 (looser threshold due to bullish bias in whale/macro data)
         if signal_type not in [SignalType.NO_SIGNAL]:
             bullish_dims = sum(1 for score in dimension_scores.values() if score > 55)
             bearish_dims = sum(1 for score in dimension_scores.values() if score < 45)
             
+            # Additional: Strong technical bearish (< 35) counts as 2 bearish dims
+            tech_score = dimension_scores.get('technical', 50)
+            if tech_score < 35:
+                bearish_dims += 1  # Bonus for strong technical bearish
+            
             if direction == SignalDirection.LONG and bullish_dims < 3:
                 signal_type = SignalType.NO_SIGNAL
                 direction = SignalDirection.NEUTRAL
-            elif direction == SignalDirection.SHORT and bearish_dims < 3:
+            elif direction == SignalDirection.SHORT and bearish_dims < 2:  # Reduced from 3 to 2
                 signal_type = SignalType.NO_SIGNAL
                 direction = SignalDirection.NEUTRAL
         
@@ -577,6 +584,29 @@ class DecisionEngineV2:
                 score += 8  # HTF bullish confirmation
             elif macd_trend == 'BEARISH':
                 score -= 8  # HTF bearish confirmation
+        
+        # ========== FALLBACK: 24h Price Change Trend Detector ==========
+        # If we have 1h candles, use them to detect major trend changes
+        # This helps when MACD 3D might be stale or lagging
+        if self.candles_1h and len(self.candles_1h) >= 24:
+            try:
+                # Get closes from last 24 candles (24h)
+                closes = [float(c.get('close', c.get('c', 0))) for c in self.candles_1h[-24:]]
+                if closes[0] > 0 and closes[-1] > 0:
+                    price_change_24h_pct = ((closes[-1] - closes[0]) / closes[0]) * 100
+                    
+                    # Strong bearish: dropped >3% in 24h
+                    if price_change_24h_pct < -3:
+                        score -= 10  # Bearish pressure
+                    elif price_change_24h_pct < -1.5:
+                        score -= 5
+                    # Strong bullish: rallied >3% in 24h
+                    elif price_change_24h_pct > 3:
+                        score += 10
+                    elif price_change_24h_pct > 1.5:
+                        score += 5
+            except Exception:
+                pass  # Fallback silently fails
         
         return max(0, min(100, score))
     
