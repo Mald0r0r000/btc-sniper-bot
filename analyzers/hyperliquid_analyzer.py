@@ -28,8 +28,8 @@ class HyperliquidAnalyzer:
     BASE_URL = "https://api.hyperliquid.xyz/info"
     
     # Adresses connues de gros comptes Hyperliquid avec bon winrate
-    # Source: données utilisateur vérifiées
-    WHALE_ADDRESSES = [
+    # Source: données utilisateur vérifiées - WEIGHT = 1.0x (trusted)
+    CURATED_WHALE_ADDRESSES = [
         # Tier 1 - Top Whales
         "0xb83de012dba672c76a7dbbbf3e459cb59d7d6e36",
         "0xb317d2bc2d3d2df5fa441b5bae0ab9d8b07283ae",
@@ -70,6 +70,9 @@ class HyperliquidAnalyzer:
         "0xad572a7894c7b0ba4db67c2a7602dd3376d4f094",
         "0x11eee2e0a613af4f636e23ff295e2dac6a191d1d",
     ]
+    
+    # Weight for leaderboard-discovered whales (0.5 = 50% of curated weight)
+    LEADERBOARD_WEIGHT = 0.5
     
     def __init__(self):
         self.session = requests.Session()
@@ -129,61 +132,132 @@ class HyperliquidAnalyzer:
         
         return result
     
-    def get_whale_positions(self) -> Dict[str, Any]:
+    def get_leaderboard_whales(self, top_n: int = 20) -> List[str]:
         """
-        Récupère les positions des gros comptes
-        Analyse le sentiment global des whales
+        Découvre dynamiquement les top traders depuis le leaderboard Hyperliquid
+        Ces adresses auront un poids réduit (LEADERBOARD_WEIGHT)
         """
-        positions = []
-        total_long = 0.0
-        total_short = 0.0
-        whale_count = 0
-        
-        for address in self.WHALE_ADDRESSES:
-            try:
-                data = self._post({
-                    'type': 'clearinghouseState',
-                    'user': address
-                })
-                
-                if not data or 'assetPositions' not in data:
+        try:
+            # Requête leaderboard - top traders par PnL
+            data = self._post({
+                'type': 'leaderboard',
+                'timeWindow': 'day'  # Peut être 'day', 'week', 'month', 'allTime'
+            })
+            
+            if not data or not isinstance(data, list):
+                return []
+            
+            # Filtrer: exclure les adresses déjà dans la liste curated
+            curated_lower = set(addr.lower() for addr in self.CURATED_WHALE_ADDRESSES)
+            leaderboard_addresses = []
+            
+            for entry in data[:top_n * 2]:  # Fetch extra to account for overlap
+                if isinstance(entry, dict):
+                    addr = entry.get('ethAddress', entry.get('user', ''))
+                elif isinstance(entry, list) and len(entry) > 0:
+                    addr = entry[0] if isinstance(entry[0], str) else ''
+                else:
                     continue
                 
-                account_value = float(data.get('marginSummary', {}).get('accountValue', 0))
+                if addr and addr.lower() not in curated_lower:
+                    leaderboard_addresses.append(addr)
                 
-                # Chercher la position BTC
-                for pos in data['assetPositions']:
-                    if pos.get('position', {}).get('coin') == 'BTC':
-                        position = pos['position']
-                        size = float(position.get('szi', 0))
-                        entry_price = float(position.get('entryPx', 0))
-                        unrealized_pnl = float(position.get('unrealizedPnl', 0))
-                        leverage = float(position.get('leverage', {}).get('value', 1))
-                        
-                        if size != 0:
-                            whale_count += 1
-                            positions.append({
-                                'address': address[:10] + '...',
-                                'size_btc': size,
-                                'direction': 'LONG' if size > 0 else 'SHORT',
-                                'entry_price': entry_price,
-                                'unrealized_pnl': unrealized_pnl,
-                                'leverage': leverage,
-                                'account_value': account_value
-                            })
-                            
-                            if size > 0:
-                                total_long += abs(size)
-                            else:
-                                total_short += abs(size)
-                        break
-                        
-            except Exception as e:
-                continue
+                if len(leaderboard_addresses) >= top_n:
+                    break
+            
+            return leaderboard_addresses
+            
+        except Exception as e:
+            print(f"   ⚠️ Leaderboard fetch error: {e}")
+            return []
+    
+    def _fetch_position(self, address: str) -> Optional[Dict[str, Any]]:
+        """Récupère la position BTC d'une adresse"""
+        try:
+            data = self._post({
+                'type': 'clearinghouseState',
+                'user': address
+            })
+            
+            if not data or 'assetPositions' not in data:
+                return None
+            
+            account_value = float(data.get('marginSummary', {}).get('accountValue', 0))
+            
+            for pos in data['assetPositions']:
+                if pos.get('position', {}).get('coin') == 'BTC':
+                    position = pos['position']
+                    size = float(position.get('szi', 0))
+                    
+                    if size != 0:
+                        return {
+                            'address': address[:10] + '...',
+                            'full_address': address.lower(),
+                            'size_btc': size,
+                            'direction': 'LONG' if size > 0 else 'SHORT',
+                            'entry_price': float(position.get('entryPx', 0)),
+                            'unrealized_pnl': float(position.get('unrealizedPnl', 0)),
+                            'leverage': float(position.get('leverage', {}).get('value', 1)),
+                            'account_value': account_value
+                        }
+            return None
+        except Exception:
+            return None
+    
+    def get_whale_positions(self) -> Dict[str, Any]:
+        """
+        Récupère les positions des gros comptes avec système à deux niveaux:
+        - Curated (high winrate): poids 1.0x
+        - Leaderboard (dynamique): poids 0.5x
+        """
+        positions = []
+        curated_positions = []
+        leaderboard_positions = []
         
-        # Calculer le ratio et le sentiment
-        total_size = total_long + total_short
-        long_ratio = (total_long / total_size * 100) if total_size > 0 else 50
+        # Totaux pondérés
+        weighted_long = 0.0
+        weighted_short = 0.0
+        
+        # 1. Fetch curated whale positions (weight = 1.0)
+        curated_count = 0
+        for address in self.CURATED_WHALE_ADDRESSES:
+            pos = self._fetch_position(address)
+            if pos:
+                pos['source'] = 'CURATED'
+                pos['weight'] = 1.0
+                curated_positions.append(pos)
+                curated_count += 1
+                
+                size = abs(pos['size_btc'])
+                if pos['direction'] == 'LONG':
+                    weighted_long += size * 1.0
+                else:
+                    weighted_short += size * 1.0
+        
+        # 2. Fetch leaderboard whale positions (weight = 0.5)
+        leaderboard_addresses = self.get_leaderboard_whales(top_n=20)
+        leaderboard_count = 0
+        
+        for address in leaderboard_addresses:
+            pos = self._fetch_position(address)
+            if pos:
+                pos['source'] = 'LEADERBOARD'
+                pos['weight'] = self.LEADERBOARD_WEIGHT
+                leaderboard_positions.append(pos)
+                leaderboard_count += 1
+                
+                size = abs(pos['size_btc'])
+                if pos['direction'] == 'LONG':
+                    weighted_long += size * self.LEADERBOARD_WEIGHT
+                else:
+                    weighted_short += size * self.LEADERBOARD_WEIGHT
+        
+        # Combiner les positions (curated en premier)
+        positions = curated_positions + leaderboard_positions
+        
+        # Calculer le ratio pondéré et le sentiment
+        total_weighted = weighted_long + weighted_short
+        long_ratio = (weighted_long / total_weighted * 100) if total_weighted > 0 else 50
         
         if long_ratio > 65:
             sentiment = "STRONG_LONG"
@@ -201,16 +275,25 @@ class HyperliquidAnalyzer:
             sentiment = "NEUTRAL"
             emoji = "⚪"
         
+        # Totaux bruts (non pondérés) pour affichage
+        raw_long = sum(abs(p['size_btc']) for p in positions if p['direction'] == 'LONG')
+        raw_short = sum(abs(p['size_btc']) for p in positions if p['direction'] == 'SHORT')
+        
         return {
-            'whale_count': whale_count,
+            'whale_count': curated_count + leaderboard_count,
+            'curated_count': curated_count,
+            'leaderboard_count': leaderboard_count,
             'positions': positions,
-            'total_long_btc': round(total_long, 4),
-            'total_short_btc': round(total_short, 4),
+            'total_long_btc': round(raw_long, 4),
+            'total_short_btc': round(raw_short, 4),
+            'weighted_long': round(weighted_long, 4),
+            'weighted_short': round(weighted_short, 4),
             'long_ratio_pct': round(long_ratio, 1),
             'sentiment': sentiment,
             'emoji': emoji,
             'signal_modifier': self._calculate_signal_modifier(long_ratio)
         }
+
     
     def _calculate_signal_modifier(self, long_ratio: float) -> int:
         """

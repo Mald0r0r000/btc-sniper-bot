@@ -193,16 +193,6 @@ class TelegramNotifier:
                 vwap_vs_price = f'➡️ ≈ VWAP'
         else:
             vwap_vs_price = 'N/A'
-            
-        # M2 Data (Cross-Asset)
-        cross_asset = indicators.get('cross_asset', {})
-        m2_data = cross_asset.get('m2', {})
-        m2_str = "N/A"
-        if m2_data.get('available'):
-            m2_val = m2_data.get('current', 0)
-            m2_trend = m2_data.get('offset_90d_trend', 'UNKNOWN')
-            m2_emoji = "💧" if m2_trend == 'EXPANDING' else "🏜️" if m2_trend == 'CONTRACTING' else "➡️"
-            m2_str = f"{m2_emoji} ${m2_val:,.0f}B ({m2_trend})"
         
         context_section = f"""
 <b>🌍 Contexte:</b>
@@ -210,7 +200,6 @@ class TelegramNotifier:
   • {oi_emoji} OI Δ1h: <b>{oi_delta:+.1f}%</b>
   • ⚛️ État: <b>{quantum_state}</b>
   • 🌊 Venturi: → <b>{venturi_dir}</b> ({venturi_prob:.0f}%)
-  • 💰 M2 Supply: <b>{m2_str}</b>
   • 💵 Prix vs VWAP: {vwap_vs_price}"""
         
         # ========== COMPTEUR SIGNAUX CONSÉCUTIFS ==========

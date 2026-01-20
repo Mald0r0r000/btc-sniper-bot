@@ -49,8 +49,6 @@ jobs:
           # Data Storage (optionnel)
           GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
           GIST_ID: ${{ secrets.GIST_ID }}
-          # Macro Data
-          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
         run: |
           python runner.py
       
