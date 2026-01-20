@@ -29,6 +29,10 @@ from .liquidation_zones import LiquidationZoneAnalyzer
 # Hyperliquid Advanced (R&D)
 from .hyperliquid_analyzer import HyperliquidAnalyzer
 
+# Technical Indicators
+from .macd_analyzer import MACDAnalyzer
+from .adx_analyzer import ADXAnalyzer
+
 __all__ = [
     # Core analyzers
     'OrderBookAnalyzer',
@@ -61,6 +65,10 @@ __all__ = [
     'LiquidationZoneAnalyzer',
     
     # Hyperliquid (R&D)
-    'HyperliquidAnalyzer'
+    'HyperliquidAnalyzer',
+    
+    # Technical Indicators
+    'MACDAnalyzer',
+    'ADXAnalyzer'
 ]
 
