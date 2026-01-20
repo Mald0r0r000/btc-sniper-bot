@@ -183,7 +183,13 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 "poc": vp_data.get("poc"),
                 "vah": vp_data.get("vah"),
                 "val": vp_data.get("val"),
-                "sh": vp_data.get("shape")  # shape
+                "sh": vp_data.get("shape"),  # shape
+                # Price context for contextual VP analysis
+                "pctx": "ABOVE_VAH" if report.get("price", 0) > vp_data.get("vah", 0) and vp_data.get("vah", 0) > 0
+                       else "BELOW_VAL" if report.get("price", 0) < vp_data.get("val", float('inf')) and vp_data.get("val", 0) > 0
+                       else "ABOVE_POC" if report.get("price", 0) > vp_data.get("poc", 0) and vp_data.get("poc", 0) > 0
+                       else "BELOW_POC" if vp_data.get("poc", 0) > 0
+                       else None
             },
             "fr": indicators.get("multi_exchange", {}).get("funding_divergence"),  # funding rate divergence
             "oi": {  # open_interest
@@ -213,6 +219,9 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 # ADX data (from adx_data)
                 "adx": adx_data.get("adx"),  # ADX value
                 "reg": adx_data.get("regime"),  # ADX regime (TRENDING/RANGING/TRANSITION)
+                "atd": adx_data.get("trend_direction"),  # ADX trend direction (BULLISH/BEARISH/NEUTRAL)
+                "dip": adx_data.get("plus_di"),  # DI+ value
+                "dim": adx_data.get("minus_di"),  # DI- value
                 # MACD 3D data (from macd_data)
                 "mcd": {
                     "h": macd_data.get("hist"),  # MACD histogram
