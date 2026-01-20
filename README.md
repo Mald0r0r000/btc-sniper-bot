@@ -77,6 +77,34 @@ Bot d'analyse BTC institutionnel avec **17 modules d'analyse**, scoring multi-di
 
 ---
 
+## 🎯 Scoring Intelligence (v2.1)
+
+### Contextual Volume Profile
+Au lieu d'un scoring statique (P-Shape = bullish, b-Shape = bearish), le bot analyse le **contexte** :
+
+| Shape | Prix vs Structure | Interprétation | Score |
+|-------|-------------------|----------------|-------|
+| b-Shape | Prix < VAL | **Breakdown bearish** | -15 |
+| b-Shape | Prix > POC | Reversal bullish | +5 |
+| P-Shape | Prix > VAH | **Breakout bullish** | +15 |
+| P-Shape | Prix < POC | Distribution bearish | -5 |
+
+### ADX Direction (DI+/DI-)
+Quand le marché est en **tendance** (ADX > 25), le bot utilise DI+/DI- :
+- DI- > DI+ (bearish momentum) → **-10**
+- DI+ > DI- (bullish momentum) → **+10**
+
+### Confluence Asymétrique
+- **LONG** : Requiert 3+ dimensions > 55
+- **SHORT** : Requiert 2+ dimensions < 45 (+ bonus si tech < 35)
+
+### Fallback 24h
+Détecte les mouvements majeurs quand le MACD 3D n'a pas encore mis à jour :
+- Baisse > 3% en 24h → **-10** structure
+- Hausse > 3% en 24h → **+10** structure
+
+---
+
 ## 🧠 Stratégie Hybride (Déployée)
 
 ### 1. Smart Entry (Zone Liquidation)
@@ -166,9 +194,6 @@ TELEGRAM_CHAT_ID=123456789
 # GitHub Gist (Optionnel - Historique)
 GITHUB_TOKEN=ghp_...
 GIST_ID=abc123...
-
-# Macro Data (Requis pour M2)
-FRED_API_KEY=...
 
 # Exchanges (Optionnel)
 BITGET_API_KEY=...
