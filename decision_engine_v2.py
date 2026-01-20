@@ -510,12 +510,41 @@ class DecisionEngineV2:
         elif agg_ratio < 0.8:
             score -= 15
         
-        # Volume Profile position
+        # Volume Profile - CONTEXTUAL ANALYSIS
+        # Shape + Price Position = True Market Context
         vp_shape = self.vp.get('shape', 'D-Shape')
-        if vp_shape == 'P-Shape':  # Bullish
-            score += 10
-        elif vp_shape == 'b-Shape':  # Bearish
-            score -= 10
+        poc = self.vp.get('poc', 0)
+        vah = self.vp.get('vah', 0)
+        val = self.vp.get('val', 0)
+        
+        if vah > 0 and val > 0 and poc > 0:
+            va_height = vah - val
+            buffer = va_height * 0.1  # 10% buffer zone
+            
+            if vp_shape == 'b-Shape':
+                # b-Shape: Volume concentrated at lows
+                if self.price < (val + buffer):
+                    # Breakdown: Price breaking below VAL = Bearish continuation
+                    score -= 15
+                elif self.price > poc:
+                    # Reversal: Price back above POC = Bullish reversal
+                    score += 5
+                else:
+                    # Consolidation: Stuck in structure
+                    score -= 10
+                    
+            elif vp_shape == 'P-Shape':
+                # P-Shape: Volume concentrated at highs
+                if self.price > (vah - buffer):
+                    # Breakout: Price pushing above VAH = Bullish continuation
+                    score += 15
+                elif self.price < poc:
+                    # Distribution: Price dropped below POC = Bearish reversal
+                    score -= 5
+                else:
+                    # Consolidation: Holding gains
+                    score += 10
+            # D-Shape: Neutral, no adjustment
             
         # KDJ Momentum (Oscillator)
         # Updated Logic: Parabolic Reversal & Slope
@@ -542,6 +571,14 @@ class DecisionEngineV2:
             # Amplify deviation from neutral (50)
             deviation = score - 50
             score = 50 + (deviation * mult)
+            
+            # ========== ADX DIRECTION (DI+ vs DI-) ==========
+            # Use DI comparison to confirm trend direction
+            adx_direction = self.adx.get('trend_direction', 'NEUTRAL')
+            if adx_direction == 'BEARISH':  # DI- > DI+
+                score -= 10  # Confirmed bearish momentum
+            elif adx_direction == 'BULLISH':  # DI+ > DI-
+                score += 10  # Confirmed bullish momentum
             
         return max(0, min(100, score))
     
