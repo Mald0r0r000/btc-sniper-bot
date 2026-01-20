@@ -131,44 +131,59 @@ class HyperliquidAnalyzer:
             result['mid_price'] = float(mids['BTC'])
         
         return result
+    # Endpoint for leaderboard data (separate from main API)
+    LEADERBOARD_URL = "https://stats-data.hyperliquid.xyz/Mainnet/leaderboard"
     
-    def get_leaderboard_whales(self, top_n: int = 20) -> List[str]:
+    def get_leaderboard_whales(self, top_n: int = 20, min_account_value: float = 1_000_000) -> List[str]:
         """
-        Découvre dynamiquement les top traders depuis le leaderboard Hyperliquid
-        Ces adresses auront un poids réduit (LEADERBOARD_WEIGHT)
+        Découvre dynamiquement les top traders depuis le leaderboard Hyperliquid.
+        
+        Utilise l'endpoint stats-data.hyperliquid.xyz/Mainnet/leaderboard
+        Filtre: compte >= $1M, pas déjà dans la liste curée
+        
+        Args:
+            top_n: Nombre max d'adresses à retourner
+            min_account_value: Valeur minimale du compte en USD
+            
+        Returns:
+            Liste d'adresses découvertes (exclut les adresses déjà curées)
         """
         try:
-            # Requête leaderboard - top traders par PnL
-            data = self._post({
-                'type': 'leaderboard',
-                'timeWindow': 'day'  # Peut être 'day', 'week', 'month', 'allTime'
-            })
+            response = self.session.get(self.LEADERBOARD_URL, timeout=15)
+            response.raise_for_status()
+            data = response.json()
             
-            if not data or not isinstance(data, list):
+            leaderboard_rows = data.get('leaderboardRows', [])
+            if not leaderboard_rows:
                 return []
             
-            # Filtrer: exclure les adresses déjà dans la liste curated
+            # Set des adresses curées (normalisées en minuscules)
             curated_lower = set(addr.lower() for addr in self.CURATED_WHALE_ADDRESSES)
-            leaderboard_addresses = []
+            discovered_addresses = []
             
-            for entry in data[:top_n * 2]:  # Fetch extra to account for overlap
-                if isinstance(entry, dict):
-                    addr = entry.get('ethAddress', entry.get('user', ''))
-                elif isinstance(entry, list) and len(entry) > 0:
-                    addr = entry[0] if isinstance(entry[0], str) else ''
-                else:
+            for row in leaderboard_rows:
+                addr = row.get('ethAddress', '')
+                if not addr:
                     continue
                 
-                if addr and addr.lower() not in curated_lower:
-                    leaderboard_addresses.append(addr)
+                # Exclure si déjà dans la liste curée
+                if addr.lower() in curated_lower:
+                    continue
                 
-                if len(leaderboard_addresses) >= top_n:
+                # Filtrer par valeur de compte
+                account_value = float(row.get('accountValue', 0))
+                if account_value < min_account_value:
+                    continue
+                
+                discovered_addresses.append(addr)
+                
+                if len(discovered_addresses) >= top_n:
                     break
             
-            return leaderboard_addresses
+            return discovered_addresses
             
         except Exception as e:
-            print(f"   ⚠️ Leaderboard fetch error: {e}")
+            # Silently fail - curated whales are still used
             return []
     
     def _fetch_position(self, address: str) -> Optional[Dict[str, Any]]:
