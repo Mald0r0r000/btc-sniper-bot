@@ -230,10 +230,15 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                     "t": macd_data.get("trend")  # MACD trend (BULLISH/BEARISH/NEUTRAL)
                 } if macd_data.get("available") else None
             },
-            # Hyperliquid whale data
+            # Hyperliquid whale data (enhanced with two-tier tracking)
             "hl": {
                 "ws": indicators.get("hyperliquid", {}).get("whale_analysis", {}).get("sentiment"),
-                "lr": indicators.get("hyperliquid", {}).get("whale_analysis", {}).get("long_ratio")
+                "lr": indicators.get("hyperliquid", {}).get("whale_analysis", {}).get("long_ratio_pct"),
+                "wc": indicators.get("hyperliquid", {}).get("whale_analysis", {}).get("whale_count"),
+                "cc": indicators.get("hyperliquid", {}).get("whale_analysis", {}).get("curated_count"),  # Curated whales
+                "lc": indicators.get("hyperliquid", {}).get("whale_analysis", {}).get("leaderboard_count"),  # Leaderboard whales
+                "wl": indicators.get("hyperliquid", {}).get("whale_analysis", {}).get("weighted_long"),  # Weighted LONG
+                "wsh": indicators.get("hyperliquid", {}).get("whale_analysis", {}).get("weighted_short")  # Weighted SHORT
             }
         }
         data_store.save_signal(signal_record)
