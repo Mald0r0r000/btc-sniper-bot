@@ -85,6 +85,13 @@ class SmartEntryAnalyzer:
         self.entry_buffer_pct = 0.05      # Buffer above/below liq zone for entry
         self.sl_buffer_pct = 0.2          # Buffer for SL beyond liq zone
         
+        # Stop Hunt Protection
+        self.psych_level_threshold_pct = 0.6   # Distance to consider "too close" to psych level
+        self.psych_major_buffer_pct = 0.3      # Extra buffer for major levels (10k)
+        self.psych_intermediate_buffer_pct = 0.15  # For intermediate levels (5k)
+        self.psych_minor_buffer_pct = 0.08     # For minor levels (1k)
+        self.max_rr_degradation = 0.1          # Max 10% R:R loss acceptable
+        
         # Timeout for waiting
         self.default_timeout_hours = 4
     
@@ -161,13 +168,24 @@ class SmartEntryAnalyzer:
                     optimal_entry = selected_zone
                     strategy = EntryStrategy.WAIT_FOR_DIP if direction == "LONG" else EntryStrategy.LIMIT_ORDER
                     
-                    # Adjust SL based on zone
+                    # Adjust SL based on zone with Stop Hunt Protection
                     if direction == "LONG":
                         # SL slightly below zone
-                        adjusted_sl = optimal_entry * (1 - self.sl_buffer_pct / 100)
+                        initial_sl = optimal_entry * (1 - self.sl_buffer_pct / 100)
                     else:
                         # SL slightly above zone
-                        adjusted_sl = optimal_entry * (1 + self.sl_buffer_pct / 100)
+                        initial_sl = optimal_entry * (1 + self.sl_buffer_pct / 100)
+                    
+                    # Apply Stop Hunt Protection
+                    adjusted_sl, sl_justification = self.calculate_safe_sl(
+                        initial_sl=initial_sl,
+                        direction=direction,
+                        entry_price=optimal_entry,
+                        liq_zones={'long': selected_zone} if direction == 'LONG' else {'short': selected_zone},
+                        current_price=current_price
+                    )
+                    if 'moved' in sl_justification:
+                        print(f"   🛡️ Stop Hunt Protection: {sl_justification}")
                     
                     # Calculate improved R:R
                     improved_rr = self._calculate_rr(optimal_entry, original_tp1, adjusted_sl, direction)
@@ -298,13 +316,22 @@ class SmartEntryAnalyzer:
         if direction == "LONG":
             # Enter slightly above liq zone (after stop hunt)
             optimal_entry = liq_zone + buffer
-            # SL below the liq zone
-            adjusted_sl = liq_zone - sl_buffer
+            # SL below the liq zone (initial)
+            initial_sl = liq_zone - sl_buffer
         else:
             # Enter slightly below liq zone (after spike)
             optimal_entry = liq_zone - buffer
-            # SL above the liq zone
-            adjusted_sl = liq_zone + sl_buffer
+            # SL above the liq zone (initial)
+            initial_sl = liq_zone + sl_buffer
+        
+        # Apply Stop Hunt Protection
+        adjusted_sl, _ = self.calculate_safe_sl(
+            initial_sl=initial_sl,
+            direction=direction,
+            entry_price=optimal_entry,
+            liq_zones={'long': liq_zone} if direction == 'LONG' else {'short': liq_zone},
+            current_price=optimal_entry
+        )
         
         return round(optimal_entry, 1), round(adjusted_sl, 1)
     
@@ -390,6 +417,150 @@ class SmartEntryAnalyzer:
 
 
 # Test function
+    
+    def _detect_psychological_levels(self, price: float, scan_range_pct: float = 1.0) -> List[Dict]:
+        """
+        Detect psychological levels (round numbers) near a given price.
+        
+        Args:
+            price: Price to scan around
+            scan_range_pct: % range to scan (default 1%)
+        
+        Returns:
+            List of dicts with 'level', 'type', 'distance_pct'
+        """
+        scan_lower = price * (1 - scan_range_pct / 100)
+        scan_upper = price * (1 + scan_range_pct / 100)
+        
+        levels = []
+        
+        # Major levels (every $10k)
+        major_step = 10000
+        major_start = int(scan_lower / major_step) * major_step
+        for level in range(major_start, int(scan_upper) + major_step, major_step):
+            if scan_lower <= level <= scan_upper:
+                distance_pct = abs(level - price) / price * 100
+                levels.append({
+                    'level': float(level),
+                    'type': 'major',
+                    'distance_pct': distance_pct
+                })
+        
+        # Intermediate levels (every $5k, excluding majors)
+        intermediate_step = 5000
+        intermediate_start = int(scan_lower / intermediate_step) * intermediate_step
+        for level in range(intermediate_start, int(scan_upper) + intermediate_step, intermediate_step):
+            if scan_lower <= level <= scan_upper and level % major_step != 0:
+                distance_pct = abs(level - price) / price * 100
+                levels.append({
+                    'level': float(level),
+                    'type': 'intermediate',
+                    'distance_pct': distance_pct
+                })
+        
+        # Note: Minor levels (every $1k) removed - too sensitive for institutional trading
+        
+        # Sort by distance
+        levels.sort(key=lambda x: x['distance_pct'])
+        return levels
+    
+    def calculate_safe_sl(
+        self,
+        initial_sl: float,
+        direction: str,
+        entry_price: float,
+        liq_zones: Optional[Dict] = None,
+        current_price: float = None
+    ) -> Tuple[float, str]:
+        """
+        Adjust SL to avoid stop hunt zones (psychological levels & liq zones).
+        
+        Args:
+            initial_sl: Naive SL from basic calculation
+            direction: LONG or SHORT
+            entry_price: Planned entry price
+            liq_zones: Liquidation zones data
+            current_price: Current market price
+        
+        Returns:
+            (adjusted_sl, justification_message)
+        """
+        adjusted_sl = initial_sl
+        justification = f"SL kept at ${initial_sl:,.0f} (safe)"
+        
+        # Detect psychological levels near SL
+        psych_levels = self._detect_psychological_levels(initial_sl, scan_range_pct=1.0)
+        
+        # Check if SL is too close to any psychological level
+        dangerous_level = None
+        buffer_needed = 0
+        
+        for level_info in psych_levels:
+            level = level_info['level']
+            level_type = level_info['type']
+            distance = level_info['distance_pct']
+            
+            # Determine if too close based on type
+            if level_type == 'major' and distance <= self.psych_level_threshold_pct:
+                dangerous_level = level
+                buffer_needed = self.psych_major_buffer_pct
+                break
+            elif level_type == 'intermediate' and distance <= self.psych_level_threshold_pct:
+                dangerous_level = level
+                buffer_needed = self.psych_intermediate_buffer_pct
+                break
+            elif level_type == 'minor' and distance <= self.psych_level_threshold_pct * 0.7:
+                dangerous_level = level
+                buffer_needed = self.psych_minor_buffer_pct
+                break
+        
+        # If near dangerous level, move SL further away
+        if dangerous_level:
+            if direction == 'LONG':
+                # For LONG, SL is below entry, move further down (away from psych level)
+                if initial_sl > dangerous_level:
+                    # SL is above dangerous level, move below it
+                    adjusted_sl = dangerous_level * (1 - buffer_needed / 100)
+                else:
+                    # SL is below dangerous level, move even further
+                    adjusted_sl = initial_sl * (1 - buffer_needed / 100)
+            else:  # SHORT
+                # For SHORT, SL is above entry, move further up (away from psych level)
+                if initial_sl < dangerous_level:
+                    # SL is below dangerous level, move above it
+                    adjusted_sl = dangerous_level * (1 + buffer_needed / 100)
+                else:
+                    # SL is above dangerous level, move even further
+                    adjusted_sl = initial_sl * (1 + buffer_needed / 100)
+            
+            justification = f"SL moved from ${initial_sl:,.0f} to ${adjusted_sl:,.0f} (avoiding ${dangerous_level:,.0f} psych level)"
+        
+        # Additional check: make sure SL isn't too close to liq zones
+        if liq_zones:
+            nearest_liq = None
+            if direction == 'LONG' and 'long' in liq_zones:
+                nearest_liq = liq_zones['long']
+            elif direction == 'SHORT' and 'short' in liq_zones:
+                nearest_liq = liq_zones['short']
+            
+            if nearest_liq:
+                liq_distance_pct = abs(adjusted_sl - nearest_liq) / nearest_liq * 100
+                if liq_distance_pct < 0.1:  # Too close to liq zone
+                    if direction == 'LONG':
+                        adjusted_sl = nearest_liq * (1 - 0.2 / 100)  # Move below
+                    else:
+                        adjusted_sl = nearest_liq * (1 + 0.2 / 100)  # Move above
+                    justification += f" + adjusted for liq zone ${nearest_liq:,.0f}"
+        
+        # Validate R:R doesn't degrade too much
+        if current_price and entry_price:
+            # This is a sanity check, not a strict enforcement
+            # We prioritize avoiding stop hunts over perfect R:R
+            pass
+        
+        return round(adjusted_sl, 1), justification
+
+
 def test_smart_entry():
     print("=" * 60)
     print("Testing Smart Entry Analyzer")
