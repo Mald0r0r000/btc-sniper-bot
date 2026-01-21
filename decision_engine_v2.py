@@ -75,9 +75,10 @@ class CompositeSignal:
     warnings: List[str]
     dimension_scores: Dict[str, float]
     manipulation_penalty: float
+    smart_entry: Optional[Dict] = None  # Smart Entry recommendation
     
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        result = {
             'type': self.type.value,
             'direction': self.direction.value,
             'confidence': round(self.confidence, 1),
@@ -91,6 +92,12 @@ class CompositeSignal:
             'dimension_scores': {k: round(v, 2) for k, v in self.dimension_scores.items()},
             'manipulation_penalty': round(self.manipulation_penalty, 2)
         }
+        
+        # Add smart_entry if available
+        if self.smart_entry:
+            result['smart_entry'] = self.smart_entry
+        
+        return result
 
 
 class DecisionEngineV2:
@@ -130,17 +137,28 @@ class DecisionEngineV2:
             'sentiment': 10,     # Inchangé
             'macro': 15          # Augmenté (direction générale)
         },
-        # Scalping - Focus sur order flow
-        'scalp': {
-            'technical': 35,
-            'structure': 10,
-            'multi_exchange': 20,
-            'derivatives': 15,
-            'onchain': 5,
-            'sentiment': 5,
-            'macro': 10
-        }
+    # Scalping - Focus sur order flow
+    'scalp': {
+        'technical': 35,
+        'structure': 10,
+        'multi_exchange': 20,
+        'derivatives': 15,
+        'onchain': 5,
+        'sentiment': 5,
+        'macro': 10
+    },
+    # Intraday 1H-2D - Optimisé pour signaux court/moyen terme
+    # Macro/OnChain réduits (lag trop important), Technical/Derivatives boostés
+    'intraday_1h_2d': {
+        'technical': 35,        # +10 (order flow is king pour intraday)
+        'structure': 20,        # +5 (FVG, support/resistance critiques)
+        'multi_exchange': 15,   # Inchangé (funding divergence reste pertinent)
+        'derivatives': 18,      # +3 (liquidations = catalyst #1 intraday)
+        'onchain': 5,           # -5 (trop lent pour 1H-2D, sauf whale panic)
+        'sentiment': 5,         # -5 (contexte uniquement)
+        'macro': 2              # -8 (noise pour intraday, sauf événements extrêmes)
     }
+}
     
     # Chemin du fichier de poids adaptatifs
     ADAPTIVE_WEIGHTS_FILE = 'adaptive_weights.json'
@@ -309,6 +327,74 @@ class DecisionEngineV2:
         print("   📊 Utilisation des poids par défaut")
         return self.WEIGHT_CONFIGS['default']
     
+    def _apply_dynamic_weight_boost(self, base_weights: Dict[str, int]) -> Dict[str, int]:
+        """
+        Apply conditional weight boosting based on extreme thresholds
+        
+        Macro indicators are baseline 2-5%, but spike to 8-12% during extreme events:
+        - M2 YoY > ±5%
+        - DXY Daily > ±2%
+        - SPX Daily > ±3%
+        - OnChain Netflow > ±10k BTC
+        
+        Returns:
+            Adjusted weights (still sum to ~100%)
+        """
+        adjusted = base_weights.copy()
+        boost_total = 0
+        boost_reasons = []
+        
+        # Check M2 threshold (Liquidity Shock)
+        m2_yoy = self.cross_asset.get('m2', {}).get('yoy_change', 0)
+        if abs(m2_yoy) > 5:  # Major liquidity event
+            m2_boost = 10 if abs(m2_yoy) > 10 else 6
+            boost_total += m2_boost
+            direction = "FLOOD" if m2_yoy > 0 else "CRISIS"
+            boost_reasons.append(f"M2 {direction} ({m2_yoy:+.1f}% YoY) → +{m2_boost}% Macro")
+        
+        # Check DXY threshold (Dollar Strength Crisis)
+        dxy_change = self.cross_asset.get('dxy', {}).get('daily_change', 0)
+        if abs(dxy_change) > 2.0:
+            dxy_boost = 8
+            boost_total += dxy_boost
+            direction = "BEARISH_BTC" if dxy_change > 0 else "BULLISH_BTC"
+            boost_reasons.append(f"DXY Spike ({dxy_change:+.1f}%) → +{dxy_boost}% Macro [{direction}]")
+        
+        # Check SPX threshold (Equity Market Crash/Rally)
+        spx_change = self.cross_asset.get('spx', {}).get('change_24h', 0)
+        if abs(spx_change) > 3.0:
+            spx_boost = 6
+            boost_total += spx_boost
+            direction = "CRASH" if spx_change < 0 else "RALLY"
+            boost_reasons.append(f"SPX {direction} ({spx_change:+.1f}%) → +{spx_boost}% Macro")
+        
+        # Check OnChain whale flow (Panic/Accumulation)
+        netflow = self.onchain.get('exchange_flows', {}).get('netflow_btc_24h', 0)
+        if abs(netflow) > 10000:
+            oc_boost = 7
+            boost_total += oc_boost
+            direction = "DUMP" if netflow > 0 else "ACCUMULATION"
+            boost_reasons.append(f"Whale {direction} ({netflow:+,.0f} BTC) → +{oc_boost}% OnChain")
+        
+        # Apply boost by reducing other dimensions proportionally
+        if boost_total > 0:
+            # Reduce Technical, Structure, Multi-Exchange, Sentiment proportionally
+            reduction_pool = ['technical', 'structure', 'multi_exchange', 'sentiment']
+            total_reducible = sum(adjusted.get(dim, 0) for dim in reduction_pool)
+            
+            for dim in reduction_pool:
+                if total_reducible > 0:
+                    reduction = int(adjusted[dim] * (boost_total / total_reducible))
+                    adjusted[dim] = max(0, adjusted[dim] - reduction)
+            
+            # Add boost to macro/onchain
+            adjusted['macro'] += boost_total
+            
+            # Log the boost
+            print(f"   ⚡ DYNAMIC BOOST: {', '.join(boost_reasons)}")
+        
+        return adjusted
+    
     def generate_composite_signal(self) -> Dict[str, Any]:
         """
         Génère un signal composite basé sur toutes les dimensions
@@ -335,8 +421,10 @@ class DecisionEngineV2:
         fluid_dynamics_modifier = venturi_modifier + self_trading_modifier
         adjusted_score = max(0, min(100, adjusted_score + fluid_dynamics_modifier))
         
-        # 4c. Appliquer le modifier Hyperliquid Whale Sentiment
+        # 4c. Appliquer le modifier Hyperliquid Whale Sentiment (réduit pour intraday)
         whale_modifier = self.hyperliquid.get('signal_modifier', 0)
+        # Cap à ±5 pour intraday (whales = swing traders, pas scalpers)
+        whale_modifier = max(-5, min(5, whale_modifier))
         adjusted_score = max(0, min(100, adjusted_score + whale_modifier))
         
         # 5. Déterminer la direction initiale (basée sur le score)
@@ -618,7 +706,7 @@ class DecisionEngineV2:
         return max(0, min(100, score))
     
     def _score_structure(self) -> float:
-        """Score structure (FVG + Entropy + MACD 3D HTF)"""
+        """Score structure (FVG + Entropy + MACD MTF)"""
         score = 50.0
         
         # Entropy / Quantum State
@@ -646,16 +734,25 @@ class DecisionEngineV2:
             if distance < 0.3:
                 score -= 10
         
-        # ========== MACD 3D HTF CONFIRMATION ==========
-        # Higher timeframe trend context - confirms structural bias
-        macd_trend = self.macd.get('trend', 'NEUTRAL')
+        # ========== MTF MACD ANALYSIS (Intraday Optimized) ==========
+        # Multi-Timeframe MACD: 1H (50%), 4H (30%), 1D (15%), 3D (5%)
+        # Composite score ranges from -100 (very bearish) to +100 (very bullish)
         macd_available = self.macd.get('available', False)
         
         if macd_available:
-            if macd_trend == 'BULLISH':
-                score += 8  # HTF bullish confirmation
-            elif macd_trend == 'BEARISH':
-                score -= 8  # HTF bearish confirmation
+            composite_score = self.macd.get('composite_score', 0)
+            confluence = self.macd.get('confluence', 'MIXED')
+            
+            # Scale composite score from [-100, +100] to [-15, +15] for structure
+            # We reduce the impact to not overwhelm other structure signals
+            macd_contribution = (composite_score / 100) * 15
+            score += macd_contribution
+            
+            # Bonus for full confluence (all timeframes aligned)
+            if confluence == 'ALL_BULLISH':
+                score += 5  # Extra boost for alignment
+            elif confluence == 'ALL_BEARISH':
+                score -= 5  # Extra penalty for aligned bear
         
         # ========== FALLBACK: 24h Price Change Trend Detector ==========
         # If we have 1h candles, use them to detect major trend changes
@@ -814,12 +911,15 @@ class DecisionEngineV2:
         return max(0, min(100, score))
     
     def _calculate_composite_score(self, dimension_scores: Dict[str, float]) -> Tuple[float, Dict]:
-        """Calcule le score composite pondéré"""
+        """Calcule le score composite pondéré avec dynamic boosting"""
+        # Apply dynamic weight adjustment for extreme market events
+        adjusted_weights = self._apply_dynamic_weight_boost(self.WEIGHT_CONFIG)
+        
         weighted_scores = {}
-        total_weight = sum(self.WEIGHT_CONFIG.values())
+        total_weight = sum(adjusted_weights.values())
         
         composite = 0.0
-        for dim, weight in self.WEIGHT_CONFIG.items():
+        for dim, weight in adjusted_weights.items():
             dim_score = dimension_scores.get(dim, 50)
             weighted = (dim_score * weight) / total_weight
             weighted_scores[dim] = round(weighted, 2)
@@ -1010,6 +1110,45 @@ class DecisionEngineV2:
         # Inject into targets as metadata
         targets['_analysis_snapshot'] = snapshot
         
+        # --- SMART ENTRY INTEGRATION ---
+        # Calculate Smart Entry recommendation (using 1H candles for robustness)
+        smart_entry_data = None
+        if self.candles_1h and signal_type != SignalType.NO_SIGNAL:
+            try:
+                smart_result = self.smart_entry_analyzer.analyze(
+                    direction=direction.value,
+                    current_price=self.price,
+                    original_tp1=targets.get('tp1', self.price),
+                    original_tp2=targets.get('tp2', self.price),
+                    original_sl=targets.get('sl', self.price),
+                    candles=self.candles_1h,
+                    candles_15m=self.candles_15m if hasattr(self, 'candles_15m') else None,
+                    liq_zones=self.liq_analyzer.analyze(self.candles_5m, self.price) if self.candles_5m else None,
+                    mtf_macd_context=self.macd  # Pass MTF MACD context
+                )
+                
+                # Build smart_entry dict
+                smart_entry_data = {
+                    'strategy': smart_result.strategy.value,
+                    'optimal_entry': smart_result.optimal_entry,
+                    'current_price': self.price,
+                    'liq_zone': smart_result.nearest_liq_zone,
+                    'rr_improvement': smart_result.potential_improvement_pct,
+                    'timeout_hours': smart_result.entry_timeout_hours
+                }
+                
+                # Add to reasons if not immediate
+                if smart_result.strategy != EntryStrategy.IMMEDIATE:
+                    if smart_result.strategy == EntryStrategy.WAIT_FOR_DIP:
+                        strategy_text = f"⏳ Attendre ${smart_result.optimal_entry:,.0f} (+{smart_result.potential_improvement_pct:.0f}% R:R)"
+                    else:
+                        strategy_text = f"📝 Limite ${smart_result.optimal_entry:,.0f}"
+                    reasons.append(strategy_text)
+                    
+            except Exception as e:
+                print(f"   ⚠️ Smart Entry failed: {e}")
+                smart_entry_data = None
+        
         return CompositeSignal(
             type=signal_type,
             direction=direction,
@@ -1022,18 +1161,9 @@ class DecisionEngineV2:
             targets=targets,
             warnings=warnings,
             dimension_scores=dimension_scores,
-            manipulation_penalty=manipulation_penalty
+            manipulation_penalty=manipulation_penalty,
+            smart_entry=smart_entry_data
         )
-        
-        # --- R&D: SMART ENTRY INTEGRATION ---
-        # Calculate Smart Entry (using 1H candles for robustness as per Backtest)
-        if self.candles_1h and signal_type != SignalType.NO_SIGNAL:
-             smart_entry_data = self._analyze_smart_entry(signal)
-             if smart_entry_data:
-                 # Enrich signal with smart entry data
-                 signal.reasons.append(f"🎯 Smart Entry: {smart_entry_data['strategy_text']}")
-
-        return signal
         
 
     

@@ -8,6 +8,9 @@ from dataclasses import dataclass
 from enum import Enum
 import numpy as np
 
+# Import MTF fractal zone detection
+from smart_entry_mtf import FractalZoneDetector, MTFMACDZoneSelector
+
 
 class EntryStrategy(Enum):
     IMMEDIATE = "IMMEDIATE"      # Enter at current price
@@ -93,7 +96,9 @@ class SmartEntryAnalyzer:
         original_tp2: float,
         original_sl: float,
         liq_zones: Optional[Dict] = None,
-        candles: Optional[List[Dict]] = None
+        candles: Optional[List[Dict]] = None,
+        candles_15m: Optional[List[Dict]] = None,
+        mtf_macd_context: Optional[Dict] = None
     ) -> SmartEntryResult:
         """
         Analyze and recommend optimal entry strategy.
@@ -123,6 +128,75 @@ class SmartEntryAnalyzer:
         improved_rr = original_rr
         improvement = 0.0
         
+        # === MTF MACD-AWARE ZONE SELECTION ===
+        if mtf_macd_context and (candles or candles_15m):
+            try:
+                # 1. Detect fractal zones
+                fractal_zones = FractalZoneDetector.detect_all_zones(
+                    direction=direction,
+                    current_price=current_price,
+                    candles_1h=candles,
+                    candles_15m=candles_15m
+                )
+                
+                # 2. Select optimal zone based on MTF context
+                selected_zone, zone_desc, timeout = MTFMACDZoneSelector.select_zone(
+                    direction=direction,
+                    current_price=current_price,
+                    zones=fractal_zones,
+                    mtf_macd=mtf_macd_context
+                )
+                
+                # 3. Apply zone selection
+                if selected_zone is None:
+                    # SKIP signal
+                    strategy = EntryStrategy.SKIP
+                    optimal_entry = current_price
+                elif abs(selected_zone - current_price) < 0.01:
+                    # IMMEDIATE
+                    strategy = EntryStrategy.IMMEDIATE
+                    optimal_entry = current_price
+                else:
+                    # WAIT_FOR_DIP or LIMIT_ORDER
+                    optimal_entry = selected_zone
+                    strategy = EntryStrategy.WAIT_FOR_DIP if direction == "LONG" else EntryStrategy.LIMIT_ORDER
+                    
+                    # Adjust SL based on zone
+                    if direction == "LONG":
+                        # SL slightly below zone
+                        adjusted_sl = optimal_entry * (1 - self.sl_buffer_pct / 100)
+                    else:
+                        # SL slightly above zone
+                        adjusted_sl = optimal_entry * (1 + self.sl_buffer_pct / 100)
+                    
+                    # Calculate improved R:R
+                    improved_rr = self._calculate_rr(optimal_entry, original_tp1, adjusted_sl, direction)
+                    improvement = ((improved_rr - original_rr) / original_rr * 100) if original_rr > 0 else 0
+                
+                # Store zone description and timeout
+                if strategy != EntryStrategy.IMMEDIATE:
+                    print(f"   🎯 Smart Entry: {zone_desc} @ ${optimal_entry:,.0f} (timeout {timeout}h)")
+                
+                return SmartEntryResult(
+                    strategy=strategy,
+                    current_price=current_price,
+                    optimal_entry=optimal_entry,
+                    nearest_liq_zone=selected_zone,
+                    liq_zone_distance_pct=abs(selected_zone - current_price) / current_price * 100 if selected_zone else 0,
+                    adjusted_tp1=original_tp1,
+                    adjusted_tp2=original_tp2,
+                    adjusted_sl=adjusted_sl,
+                    original_rr_ratio=original_rr,
+                    improved_rr_ratio=improved_rr,
+                    potential_improvement_pct=improvement,
+                    entry_timeout_hours=timeout
+                )
+                
+            except Exception as e:
+                print(f"   ⚠️ MTF Smart Entry failed: {e}, falling back to legacy logic")
+                # Fall through to legacy logic
+        
+        # === LEGACY LOGIC (Fallback if no MTF context) ===
         # Find nearest relevant liquidation zone
         if liq_zones:
             nearest_liq = self._find_nearest_liq_zone(
