@@ -184,6 +184,7 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 "vah": vp_data.get("vah"),
                 "val": vp_data.get("val"),
                 "sh": vp_data.get("shape"),  # shape
+                "sk": vp_data.get("skew"),   # skew (new for D-Shape pressure)
                 # Price context for contextual VP analysis
                 "pctx": "ABOVE_VAH" if report.get("price", 0) > vp_data.get("vah", 0) and vp_data.get("vah", 0) > 0
                        else "BELOW_VAL" if report.get("price", 0) < vp_data.get("val", float('inf')) and vp_data.get("val", 0) > 0

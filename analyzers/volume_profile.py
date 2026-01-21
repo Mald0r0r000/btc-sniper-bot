@@ -84,11 +84,15 @@ class VolumeProfileAnalyzer:
         # Shape Detection
         shape = self._detect_shape(profile, poc, price_min, price_max, total_vol)
         
+        # R&D: Volume Skew & Breakout Pressure (D-Shape Logic)
+        skew = self._calculate_volume_skew(profile, price_min, price_max, total_vol)
+        
         return {
             'poc': round(poc, 2),
             'vah': round(vah, 2),
             'val': round(val, 2),
             'shape': shape,
+            'skew': skew,  # > 0 means volume concentrated higher (Bullish Pressure), < 0 means lower (Bearish Pressure)
             'price_range': {
                 'min': round(price_min, 2),
                 'max': round(price_max, 2),
@@ -98,6 +102,80 @@ class VolumeProfileAnalyzer:
             'session_bars': len(df_session)
         }
     
+    def _calculate_volume_skew(self, profile: pd.Series, price_min: float, price_max: float, total_vol: float) -> float:
+        """
+        Calcule le skew du volume (Distribution Asymétrique)
+        > 0 : Volume concentré dans la moitié haute (Pression haussière)
+        < 0 : Volume concentré dans la moitié basse (Pression baissière)
+        """
+        if total_vol == 0:
+            return 0.0
+            
+        mid_price = (price_min + price_max) / 2
+        
+        vol_above_mid = profile.loc[mid_price:].sum()
+        vol_below_mid = profile.loc[:mid_price].sum()
+        
+        # Skew normalisé entre -1 et 1
+        # Exemple: Si 70% du vol est en haut, skew = 0.4
+        skew = (vol_above_mid - vol_below_mid) / total_vol
+        return round(skew, 2)
+
+    def detect_breakout_pressure(self, current_price: float, skew: float, cvd_trend: str = 'NEUTRAL') -> Dict[str, Any]:
+        """
+        Anticipe la direction du breakout d'un D-Shape
+        
+        Args:
+            current_price: Prix actuel
+            skew: Volume skew (-1 à 1)
+            cvd_trend: Tendance CVD (BULLISH/BEARISH/NEUTRAL)
+        """
+        pressure_score = 0
+        direction = 'NEUTRAL'
+        
+        # 1. Volume Skew Pressure
+        if skew > 0.15:
+            pressure_score += 30
+            direction_bias = 'UP'
+        elif skew < -0.15:
+            pressure_score += 30
+            direction_bias = 'DOWN'
+        else:
+            direction_bias = 'NEUTRAL'
+            
+        # 2. CVD Confirmation (Accumulation/Distribution)
+        if cvd_trend == 'BULLISH':
+            if direction_bias == 'UP':
+                pressure_score += 40  # Confirmation forte
+            elif direction_bias == 'NEUTRAL':
+                pressure_score += 20
+                direction_bias = 'UP'
+        elif cvd_trend == 'BEARISH':
+            if direction_bias == 'DOWN':
+                pressure_score += 40
+            elif direction_bias == 'NEUTRAL':
+                pressure_score += 20
+                direction_bias = 'DOWN'
+                
+        # 3. Price Proximity Pressure
+        result = self.analyze() # Note: Inefficient if called repeatedly, better to pass va bounds
+        vah = result['vah']
+        val = result['val']
+        
+        # Pression aux bornes
+        near_threshold = 0.005 # 0.5%
+        if abs(current_price - vah) / vah < near_threshold and direction_bias == 'UP':
+            pressure_score += 30
+        elif abs(current_price - val) / val < near_threshold and direction_bias == 'DOWN':
+            pressure_score += 30
+            
+        return {
+            'pressure_score': min(100, pressure_score),
+            'direction': direction_bias if pressure_score > 40 else 'NEUTRAL',
+            'skew': skew,
+            'is_breakout_imminent': pressure_score > 70
+        }
+
     def _get_session_data(self) -> pd.DataFrame:
         """Récupère les données de la session actuelle"""
         if 'timestamp' not in self.df.columns:

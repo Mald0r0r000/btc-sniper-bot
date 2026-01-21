@@ -563,7 +563,23 @@ class DecisionEngineV2:
                 else:
                     # Consolidation: Holding gains
                     score += 10
-            # D-Shape: Neutral, no adjustment
+            # D-Shape: Range or Pre-Breakout
+            elif vp_shape == 'D-Shape':
+                # R&D: Volume Skew Pressure (Breakout Anticipation)
+                skew = self.vp.get('skew', 0)
+                
+                # Check for pressure buildup
+                if skew > 0.15:
+                    # Volume accumulating at highs -> Bullish pressure
+                    pressure_bonus = min(20, skew * 50) # +7.5 to +20
+                    score += pressure_bonus
+                elif skew < -0.15:
+                    # Volume accumulating at lows -> Bearish pressure
+                    pressure_penalty = min(20, abs(skew) * 50) # -7.5 to -20
+                    score -= pressure_penalty
+                else:
+                    # True neutral D-Shape
+                    pass
             
         # KDJ Momentum (Oscillator)
         # Updated Logic: Parabolic Reversal & Slope
@@ -875,12 +891,22 @@ class DecisionEngineV2:
         if near_val and self.cvd.get('net_cvd', 0) < -50:
             return SignalType.SHORT_BREAKOUT
         
-        # Fade setups
+        # Fade setups (Range Trading D-Shape)
         if self.vp.get('shape') == 'D-Shape':
-            if near_vah:
-                return SignalType.FADE_HIGH
-            if near_val:
-                return SignalType.FADE_LOW
+            skew = self.vp.get('skew', 0)
+            adx_val = self.adx.get('adx', 0)
+            
+            # FADE HIGH (Short VAH)
+            # Only if no bullish pressure (Skew < 0.15)
+            if near_vah and skew < 0.15:
+                if adx_val < 30: # Stronger confidence in range
+                    return SignalType.FADE_HIGH
+            
+            # FADE LOW (Long VAL)
+            # Only if no bearish pressure (Skew > -0.15)
+            if near_val and skew > -0.15:
+                if adx_val < 30:
+                    return SignalType.FADE_LOW
         
         # Signaux contrarian (sentiment extrême)
         fg_value = self.sentiment.get('fear_greed', {}).get('value', 50)
