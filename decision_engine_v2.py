@@ -439,7 +439,26 @@ class DecisionEngineV2:
                 
             adjusted_score -= macro_penalty
         
-        # Filter 7: Event Calendar (Phase 3 - Avoid FOMC/CPI/NFP volatility)
+        # Filter 8: Venturi Confirmation (R&D Logic)
+        # Prevent Shorting Macro Bullish dips unless Fluid Dynamics (Venturi) confirms breakdown
+        if direction == SignalDirection.SHORT and signal_type not in [SignalType.NO_SIGNAL]:
+            tech_score = dimension_scores.get('technical', 50)
+            macro_score = dimension_scores.get('macro', 50)
+            
+            # Conflict: Technicals scream BEARISH (<35) but Macro says BULLISH (>55)
+            if tech_score < 35 and macro_score > 55:
+                # We need Venturi confirmation to proceed with SHORT
+                venturi_direction = self.venturi.get('direction', 'NEUTRAL')
+                breakout_prob = self.venturi.get('breakout_probability', 0)
+                
+                # If Venturi is not DOWN, we block the signal
+                is_venturi_bearish = (venturi_direction == 'DOWN' or 
+                                     (breakout_prob > 50 and venturi_direction == 'DOWN'))
+                
+                if not is_venturi_bearish:
+                    signal_type = SignalType.NO_SIGNAL
+                    direction = SignalDirection.NEUTRAL
+                    # Optional: Add a specific reason log or metric tracking here
         if self.event.get('event_active') and signal_type not in [SignalType.NO_SIGNAL]:
             event_penalty = self.event.get('confidence_penalty', 30)
             adjusted_score -= event_penalty
