@@ -224,37 +224,63 @@ class TelegramNotifier:
             warnings_text = '\n'.join([f"  ⚠️ {w}" for w in warnings[:2]])
             warnings_section = f'\n{warnings_text}'
         
-        # ========== SMART ENTRY & MOMENTUM (NEW R&D) ==========
-        # ========== SMART ENTRY & MOMENTUM (HYBRID STRATEGY) ==========
+        
+        # ========== MTF MACD & SMART ENTRY (V2) ==========
         smart_section = ''
-        if targets:
-            # Momentum info
-            momentum_score = targets.get('_momentum_score', 0)
-            momentum_tf = targets.get('_momentum_tf', '')
+        
+        # MTF MACD Divergence Alert
+        mtf_macd = signal.get('mtf_macd', {})
+        if mtf_macd and mtf_macd.get('available'):
+            divergence = mtf_macd.get('divergence', {})
+            div_type = divergence.get('type')
             
-            # Smart Entry info (pre-calculated by DecisionEngineV2)
-            smart_strategy = targets.get('_smart_entry_strategy')
-            smart_price = targets.get('_smart_entry_price')
-            smart_text = targets.get('_smart_entry_text')
-            smart_liq = targets.get('_smart_entry_liq_zone')
-            rr_improvement = targets.get('_smart_entry_rr_improvement', 0)
-            
-            if smart_strategy and smart_text:
-                if smart_strategy == 'WAIT_DIP':
-                    strategy_text = f"⏳ {smart_text}"
+            # Only show alert for divergences (not CONFLUENCE or NONE)
+            if div_type and div_type not in ['CONFLUENCE', 'NONE']:
+                if 'BEARISH' in div_type:
+                    div_emoji = '🔴⚠️'
+                elif 'BULLISH' in div_type:
+                    div_emoji = '🟢⚠️'
                 else:
-                    strategy_text = f"📝 {smart_text}"
+                    div_emoji = '🟡⚠️'
                 
-                improvement_text = f" (R:R +{rr_improvement:.0f}%)" if rr_improvement > 10 else ""
-                smart_section = f"\n\n<b>🎯 Smart Entry (Hybrid):</b> {strategy_text}{improvement_text}"
-                
-                if smart_liq:
-                    smart_section += f"\n  • Zone LIQ: ${smart_liq:,.0f}"
+                div_desc = divergence.get('description', div_type.replace('_', ' '))
+                smart_section += f"\n\n<b>{div_emoji} MTF MACD:</b> {div_desc}"
+        
+        # Smart Entry Recommendation
+        smart_entry = signal.get('smart_entry', {})
+        if smart_entry:
+            strategy = smart_entry.get('strategy')
+            optimal_entry = smart_entry.get('optimal_entry')
+            current_price = smart_entry.get('current_price', price)
+            rr_improvement = smart_entry.get('rr_improvement', 0)
             
-            # Add momentum info if available
-            if momentum_score > 0:
-                momentum_emoji = '🔥' if momentum_score >= 70 else '⚡' if momentum_score >= 50 else '💨'
-                smart_section += f"\n  • {momentum_emoji} Momentum: {momentum_score:.0f}/100 ({momentum_tf})"
+            if strategy and optimal_entry:
+                # Strategy emoji and text
+                if strategy == 'IMMEDIATE':
+                    strategy_text = "🚀 <b>Entry NOW</b> at market"
+                elif strategy == 'WAIT_FOR_DIP':
+                    pct_diff = ((optimal_entry - current_price) / current_price) * 100
+                    strategy_text = f"⏳ <b>Wait for dip</b> to ${optimal_entry:,.0f} ({pct_diff:+.1f}%)"
+                elif strategy == 'LIMIT_ORDER':
+                    pct_diff = ((optimal_entry - current_price) / current_price) * 100
+                    strategy_text = f"📝 <b>Limit order</b> at ${optimal_entry:,.0f} ({pct_diff:+.1f}%)"
+                elif strategy == 'SKIP':
+                    strategy_text = "⛔ <b>Skip this signal</b> (risk too high)"
+                else:
+                    strategy_text = f"📌 {strategy}"
+                
+                improvement_text = f" → R:R +{rr_improvement:.0f}%" if rr_improvement > 10 else ""
+                smart_section += f"\n<b>🎯 Smart Entry:</b> {strategy_text}{improvement_text}"
+                
+                # Liq zone if available
+                liq_zone = smart_entry.get('liq_zone')
+                if liq_zone:
+                    smart_section += f"\n  • Zone LIQ: ${liq_zone:,.0f}"
+                
+                # Timeout warning
+                timeout = smart_entry.get('timeout_hours', 0)
+                if timeout > 0 and strategy != 'IMMEDIATE':
+                    smart_section += f"\n  • ⏰ Timeout: {timeout}h"
         
         # ========== WINRATE STATS ==========
         winrate_section = ''

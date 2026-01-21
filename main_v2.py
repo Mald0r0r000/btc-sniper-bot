@@ -538,7 +538,9 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
             } if options_result else None,
             'open_interest': oi_analysis_result if mode == 'full' else oi_data, # Use full analysis result in full mode
             'adx': adx_result,  # ADX market regime data
-            'macd': macd_result,  # MACD 3D data
+            'macd': macd_result,  # MACD MTF data
+            'mtf_macd': decision_result['primary_signal'].get('mtf_macd'),  # MTF MACD from signal
+            'smart_entry': decision_result['primary_signal'].get('smart_entry'),  # Smart Entry from signal
             'fluid_dynamics': {
                 'venturi': venturi_result if venturi_result else None,
                 'self_trading': self_trading_result if self_trading_result else None
