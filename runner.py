@@ -240,7 +240,50 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 "lc": indicators.get("hyperliquid", {}).get("whale_analysis", {}).get("leaderboard_count"),  # Leaderboard whales
                 "wl": indicators.get("hyperliquid", {}).get("whale_analysis", {}).get("weighted_long"),  # Weighted LONG
                 "wsh": indicators.get("hyperliquid", {}).get("whale_analysis", {}).get("weighted_short")  # Weighted SHORT
-            }
+            },
+            # MTF MACD data (Multi-Timeframe MACD with divergence detection)
+            "mtf": {
+                "av": macd_data.get("available", False),  # available
+                "cs": round(macd_data.get("composite_score", 0), 1),  # composite_score
+                "tr": macd_data.get("trend", "NEUTRAL"),  # trend
+                "cf": macd_data.get("confluence", "MIXED"),  # confluence
+                "dv": {  # divergence
+                    "t": macd_data.get("divergence", {}).get("type", "UNKNOWN"),  # type
+                    "sa": macd_data.get("divergence", {}).get("score_adjustment", 0),  # score_adjustment
+                    "ds": macd_data.get("divergence", {}).get("description", "")  # description
+                } if macd_data.get("divergence") else None,
+                "tf": {  # timeframes
+                    "1h": {
+                        "t": macd_data.get("mtf_data", {}).get("1h", {}).get("trend"),
+                        "h": macd_data.get("mtf_data", {}).get("1h", {}).get("hist"),
+                        "s": macd_data.get("mtf_data", {}).get("1h", {}).get("slope")
+                    } if macd_data.get("mtf_data", {}).get("1h", {}).get("available") else None,
+                    "4h": {
+                        "t": macd_data.get("mtf_data", {}).get("4h", {}).get("trend"),
+                        "h": macd_data.get("mtf_data", {}).get("4h", {}).get("hist"),
+                        "s": macd_data.get("mtf_data", {}).get("4h", {}).get("slope")
+                    } if macd_data.get("mtf_data", {}).get("4h", {}).get("available") else None,
+                    "1d": {
+                        "t": macd_data.get("mtf_data", {}).get("1d", {}).get("trend"),
+                        "h": macd_data.get("mtf_data", {}).get("1d", {}).get("hist"),
+                        "s": macd_data.get("mtf_data", {}).get("1d", {}).get("slope")
+                    } if macd_data.get("mtf_data", {}).get("1d", {}).get("available") else None,
+                    "3d": {
+                        "t": macd_data.get("mtf_data", {}).get("3d", {}).get("trend"),
+                        "h": macd_data.get("mtf_data", {}).get("3d", {}).get("hist"),
+                        "s": macd_data.get("mtf_data", {}).get("3d", {}).get("slope")
+                    } if macd_data.get("mtf_data", {}).get("3d", {}).get("available") else None
+                } if macd_data.get("mtf_data") else None
+            } if macd_data.get("available") else None,
+            # Smart Entry recommendation (fractal zones + MTF context)
+            "se": {
+                "st": signal.get("smart_entry", {}).get("strategy"),  # strategy
+                "oe": signal.get("smart_entry", {}).get("optimal_entry"),  # optimal_entry
+                "cp": signal.get("smart_entry", {}).get("current_price"),  # current_price
+                "lz": signal.get("smart_entry", {}).get("liq_zone"),  # liq_zone
+                "rr": signal.get("smart_entry", {}).get("rr_improvement"),  # rr_improvement
+                "to": signal.get("smart_entry", {}).get("timeout_hours")  # timeout_hours
+            } if signal.get("smart_entry") else None
         }
         data_store.save_signal(signal_record)
         
