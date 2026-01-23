@@ -265,21 +265,48 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         except Exception as e:
             print(f"   ⚠️ Hyperliquid analysis failed: {e}")
 
+        # Open Interest Analysis (avancée avec delta)
+        oi_analysis_result = {}
+        target_open_interests = {}
+        try:
+            oi_analyzer = OpenInterestAnalyzer()
+            
+            # Récupérer l'OI de tous les exchanges
+            if multi_exchange_data.get('open_interest', {}).get('by_exchange'):
+                target_open_interests = multi_exchange_data['open_interest']['by_exchange'].copy()
+            else:
+                target_open_interests = {'bitget': oi_data.get('amount', 0)}
+            
+            # Ajouter l'OI Hyperliquid s'il est disponible
+            if hyperliquid_result and hyperliquid_result.get('success'):
+                hl_oi = hyperliquid_result.get('market', {}).get('open_interest_btc', 0)
+                if hl_oi > 0:
+                    target_open_interests['hyperliquid'] = hl_oi
+            
+            oi_analysis_result = oi_analyzer.analyze(current_price, target_open_interests)
+            delta = oi_analysis_result.get('delta', {})
+            sig = oi_analysis_result.get('signal', {})
+            
+            if delta.get('available'):
+                delta_1h = delta.get('1h', {}).get('delta_oi_pct', 0)
+                print(f"   📊 Open Interest: {sig.get('emoji', '⚪')} {oi_analysis_result.get('total_oi_btc', 0):,.0f} BTC | Δ1h: {delta_1h:+.2f}%")
+            else:
+                print(f"   📊 Open Interest: {oi_analysis_result.get('total_oi_btc', 0):,.0f} BTC (tracking)")
+        except Exception as e:
+            print(f"   ⚠️ OI Analysis failed: {e}")
+            if not target_open_interests:
+                 target_open_interests = {'bitget': oi_data.get('amount', 0)}
+
         # Derivatives Analysis
         try:
             funding_rates = {}
-            open_interests = {}
+            open_interests = target_open_interests
             
             if multi_exchange_data.get('funding_analysis'):
                 for ex, rate in multi_exchange_data['funding_analysis'].get('by_exchange', {}).items():
                     funding_rates[ex] = rate / 100  # Reconvertir en décimal
             else:
                 funding_rates = {'bitget': funding_data.get('current', 0)}
-            
-            if multi_exchange_data.get('open_interest'):
-                open_interests = multi_exchange_data['open_interest'].get('by_exchange', {}).copy()
-            else:
-                open_interests = {'bitget': oi_data.get('amount', 0)}
             
             # Injecter Funding Rate Hyperliquid (Normalisé à 8h pour comparaison)
             if hyperliquid_result and hyperliquid_result.get('success'):
@@ -288,10 +315,8 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
                 funding_rates['hyperliquid'] = hl_funding_1h * 8
             
             deriv_analyzer = DerivativesAnalyzer()
-            # 1. Analyze Open Interest first (needed for derivatives sentiment)
-            oi_analysis_result = oi_analyzer.analyze(current_price, open_interests)
             
-            # 2. Analyze Derivatives (using OI analysis)
+            # 2. Analyze Derivatives (using OI analysis result)
             derivatives_result = deriv_analyzer.analyze(current_price, funding_rates, open_interests, oi_analysis_result)
             
             deriv_sentiment = derivatives_result.get('sentiment', {})
@@ -337,34 +362,10 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
             print(f"   ⚠️ Options analysis failed: {e}")
         
 
-        # Open Interest Analysis (avancée avec delta)
-        oi_analysis_result = {}
-        try:
-            oi_analyzer = OpenInterestAnalyzer()
-            
-            # Récupérer l'OI de tous les exchanges
-            if multi_exchange_data.get('open_interest', {}).get('by_exchange'):
-                open_interests = multi_exchange_data['open_interest']['by_exchange'].copy()
-            else:
-                open_interests = {'bitget': oi_data.get('amount', 0)}
-            
-            # Ajouter l'OI Hyperliquid s'il est disponible
-            if hyperliquid_result and hyperliquid_result.get('success'):
-                hl_oi = hyperliquid_result.get('market', {}).get('open_interest_btc', 0)
-                if hl_oi > 0:
-                    open_interests['hyperliquid'] = hl_oi
-            
-            oi_analysis_result = oi_analyzer.analyze(current_price, open_interests)
-            delta = oi_analysis_result.get('delta', {})
-            sig = oi_analysis_result.get('signal', {})
-            
-            if delta.get('available'):
-                delta_1h = delta.get('1h', {}).get('delta_oi_pct', 0)
-                print(f"   📊 Open Interest: {sig.get('emoji', '⚪')} {oi_analysis_result.get('total_oi_btc', 0):,.0f} BTC | Δ1h: {delta_1h:+.2f}%")
-            else:
-                print(f"   📊 Open Interest: {oi_analysis_result.get('total_oi_btc', 0):,.0f} BTC (tracking)")
-        except Exception as e:
-            print(f"   ⚠️ OI Analysis failed: {e}")
+        # Open Interest Analysis (Moved up before Derivatives Analysis)
+
+        # Block moved
+
         
         # Self-Trading Detection (Fluid Dynamics R&D)
         self_trading_result = {}
