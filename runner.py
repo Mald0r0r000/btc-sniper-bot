@@ -223,13 +223,13 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 "atd": adx_data.get("trend_direction"),  # ADX trend direction (BULLISH/BEARISH/NEUTRAL)
                 "dip": adx_data.get("plus_di"),  # DI+ value
                 "dim": adx_data.get("minus_di"),  # DI- value
-                # MACD 3D data (from macd_data)
+                # MACD 3D data (extracted from mtf_data['3d'])
                 "mcd": {
-                    "h": macd_data.get("hist"),  # MACD histogram
-                    "s": macd_data.get("signal"),  # MACD signal line
-                    "v": macd_data.get("macd"),  # MACD value
-                    "t": macd_data.get("trend")  # MACD trend (BULLISH/BEARISH/NEUTRAL)
-                } if macd_data.get("available") else None
+                    "h": macd_data.get("mtf_data", {}).get("3d", {}).get("hist"),  # MACD histogram
+                    "s": macd_data.get("mtf_data", {}).get("3d", {}).get("signal"),  # MACD signal line
+                    "v": macd_data.get("mtf_data", {}).get("3d", {}).get("macd"),  # MACD value
+                    "t": macd_data.get("mtf_data", {}).get("3d", {}).get("trend")  # MACD trend (BULLISH/BEARISH/NEUTRAL)
+                } if macd_data.get("available") and macd_data.get("mtf_data", {}).get("3d", {}).get("available") else None
             },
             # Hyperliquid whale data (enhanced with two-tier tracking)
             "hl": {
