@@ -32,6 +32,14 @@ from .hyperliquid_analyzer import HyperliquidAnalyzer
 # Technical Indicators
 from .macd_analyzer import MACDAnalyzer
 from .adx_analyzer import ADXAnalyzer
+from .oscillators import OscillatorAnalyzer
+
+# HTF & Cross-Asset
+from .htf_bias import HTFBiasAnalyzer
+from .cross_asset import CrossAssetAnalyzer
+
+# Event Calendar
+from .event_calendar import EventCalendarAnalyzer
 
 __all__ = [
     # Core analyzers
@@ -69,6 +77,14 @@ __all__ = [
     
     # Technical Indicators
     'MACDAnalyzer',
-    'ADXAnalyzer'
+    'ADXAnalyzer',
+    'OscillatorAnalyzer',
+    
+    # HTF & Cross-Asset
+    'HTFBiasAnalyzer',
+    'CrossAssetAnalyzer',
+    
+    # Event Calendar
+    'EventCalendarAnalyzer'
 ]
 
