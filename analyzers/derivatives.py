@@ -30,7 +30,7 @@ class DerivativesAnalyzer:
         self.exchange_data = exchange_data or {}
         
     def analyze(self, current_price: float, funding_rates: Dict[str, float], 
-                open_interests: Dict[str, float]) -> Dict[str, Any]:
+                open_interests: Dict[str, float], oi_analysis: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         Analyse complète des dérivés
         
@@ -38,6 +38,7 @@ class DerivativesAnalyzer:
             current_price: Prix spot actuel
             funding_rates: {exchange: rate} 
             open_interests: {exchange: oi_amount}
+            oi_analysis: Résultat de OpenInterestAnalyzer.analyze() (optionnel)
             
         Returns:
             Dict avec analyse complète
@@ -49,7 +50,7 @@ class DerivativesAnalyzer:
         
         # Sentiment dérivé global
         derivative_sentiment = self._calculate_derivative_sentiment(
-            futures_analysis, funding_analysis, liquidation_map
+            futures_analysis, funding_analysis, liquidation_map, oi_analysis
         )
         
         return {
@@ -305,7 +306,7 @@ class DerivativesAnalyzer:
         }
     
     def _calculate_derivative_sentiment(self, futures: Dict, funding: Dict, 
-                                        liquidations: Dict) -> Dict[str, Any]:
+                                        liquidations: Dict, oi_analysis: Dict[str, Any] = None) -> Dict[str, Any]:
         """Calcule le sentiment global basé sur les dérivés"""
         score = 50  # Neutre par défaut
         factors = []
@@ -339,7 +340,58 @@ class DerivativesAnalyzer:
         # Cascade risk
         if liquidations.get('cascade_risk'):
             factors.append("⚠️ Risque de cascade de liquidations")
-        
+            
+        # ============ DELTA OI INTEGRATION ============
+        if oi_analysis:
+            delta = oi_analysis.get('delta', {})
+            divergence = oi_analysis.get('divergence', {})
+            
+            # 1. Delta OI (Changement brut)
+            # OI en forte hausse = conviction forte
+            d1h = delta.get('1h', {}).get('delta_oi_pct', 0)
+            d4h = delta.get('4h', {}).get('delta_oi_pct', 0)
+            
+            if d1h > 2.0 or d4h > 5.0:
+                # Forte hausse OI - Validation du mouvement en cours
+                # Direction du prix non disponible ici, mais OI hausse = Intérêt
+                # Nous ajustons le score légèrement vers les extrêmes si déjà orienté
+                if score > 55:
+                    score += 10
+                    factors.append("+10 OI en hausse (Validation Bullish)")
+                elif score < 45:
+                    score -= 10
+                    factors.append("-10 OI en hausse (Validation Bearish)")
+                else:
+                    # Neutre + OI hausse = Volatilité à venir
+                    factors.append("⚠️ OI en hausse (Volatilité attendue)")
+            
+            elif d1h < -2.0 or d4h < -5.0:
+                # Forte baisse OI - Liquidation ou fermeture
+                if score > 55:
+                    # Bullish mais OI baisse = Prise de profit / Faiblesse
+                    score -= 10
+                    factors.append("-10 OI en baisse (Faiblesse du mouvement)")
+                elif score < 45:
+                    # Bearish mais OI baisse = Short covering
+                    score += 10
+                    factors.append("+10 OI en baisse (Short covering possible)")
+            
+            # 2. Divergence OI vs Prix (si disponible)
+            oi_signal = divergence.get('signal', 'NEUTRAL')
+            
+            if oi_signal == 'BULLISH_ENTRY':
+                score += 10
+                factors.append("+10 Divergence OI Bullish (Prix monte + OI monte)")
+            elif oi_signal == 'BEARISH_DIVERGENCE':
+                score -= 10
+                factors.append("-10 Divergence OI Bearish (Prix monte + OI baisse)")
+            elif oi_signal == 'BEARISH_ENTRY':
+                score -= 10
+                factors.append("-10 Divergence OI Bearish (Prix baisse + OI monte)")
+            elif oi_signal == 'BULLISH_DIVERGENCE': # Capitulation (Prix baisse + OI baisse)
+                score += 10
+                factors.append("+10 Capitulation détectée (Prix baisse + OI baisse)")
+
         # Normaliser
         score = max(0, min(100, score))
         

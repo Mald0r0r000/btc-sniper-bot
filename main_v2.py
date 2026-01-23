@@ -288,7 +288,11 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
                 funding_rates['hyperliquid'] = hl_funding_1h * 8
             
             deriv_analyzer = DerivativesAnalyzer()
-            derivatives_result = deriv_analyzer.analyze(current_price, funding_rates, open_interests)
+            # 1. Analyze Open Interest first (needed for derivatives sentiment)
+            oi_analysis_result = oi_analyzer.analyze(current_price, open_interests)
+            
+            # 2. Analyze Derivatives (using OI analysis)
+            derivatives_result = deriv_analyzer.analyze(current_price, funding_rates, open_interests, oi_analysis_result)
             
             deriv_sentiment = derivatives_result.get('sentiment', {})
             print(f"   📈 Derivatives: {deriv_sentiment.get('emoji', '⚪')} {deriv_sentiment.get('sentiment', 'NEUTRAL')}")
