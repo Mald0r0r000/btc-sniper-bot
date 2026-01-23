@@ -233,7 +233,9 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         macd_result = macd_analyzer.analyze()
         if macd_result.get('available'):
             macd_emoji = "🟢" if macd_result['trend'] == 'BULLISH' else "🔴" if macd_result['trend'] == 'BEARISH' else "⚪"
-            print(f"   📈 MACD (3D): {macd_emoji} {macd_result['trend']} (Hist: {macd_result['hist']:.2f})")
+            # Access 3D hist from MTF data
+            hist_3d = macd_result.get('mtf_data', {}).get('3d', {}).get('hist', 0)
+            print(f"   📈 MACD (3D): {macd_emoji} {macd_result['trend']} (Hist: {hist_3d:.2f})")
     except Exception as e:
         print(f"   ⚠️ MACD analysis failed: {e}")
     
