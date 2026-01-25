@@ -182,12 +182,12 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 "mtf": {
                     tf: {
                         "nc": data.get("net_cvd"),  # net_cvd
-                        "bv": data.get("buy_volume"), # buy_volume
-                        "sv": data.get("sell_volume"), # sell_volume
+                        "bv": data.get("buy_volume"),
+                        "sv": data.get("sell_volume"),
                         "ar": data.get("aggression_ratio"),
                         "tr": data.get("trend"),
                         "sc": data.get("score")
-                    } for tf, data in cvd_data.get("mtf_data", {}).items()
+                    } for tf, data in cvd_data.get("mtf_data", {}).items() if data.get("available")
                 },
                 "cs": cvd_data.get("composite_score"),
                 "cf": cvd_data.get("confluence"),

@@ -119,12 +119,16 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     
     # CVD Analysis (MTF)
     cvd_analyzer = CVDAnalyzer(trades)
-    cvd_result = cvd_analyzer.analyze_mtf() # Use new MTF analysis
+    # Pass Hybrid Data: candles_1h (Meso) and candles_1d (Macro)
+    cvd_result = cvd_analyzer.analyze_mtf({
+        '1h': candles_1h,
+        '1d': df_macro.to_dict('records') if df_macro is not None else []
+    }) 
     print(f"   📊 CVD (MTF): {cvd_result['emoji']} {cvd_result['trend']} (Score: {cvd_result['composite_score']}) | Confluence: {cvd_result['confluence']}")
     if cvd_result.get('mtf_data'):
         print("      Timeframe | Net CVD | Vol Buy | Vol Sell | Ratio | Trend")
         print("      " + "-" * 60)
-        for tf in ['5m', '1h', '4h']:
+        for tf in ['5m', '1h', '4h', '1d']:
             data = cvd_result['mtf_data'].get(tf)
             if data:
                 print(f"      {tf:<9} | {data['net_cvd']:>7.2f} | {data['buy_volume']:>7.1f} | {data['sell_volume']:>8.1f} | {data['aggression_ratio']:>5.2f} | {data['trend']}")
