@@ -191,11 +191,13 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 },
                 "cs": cvd_data.get("composite_score"),
                 "cf": cvd_data.get("confluence"),
-                "abs": cvd_result.get("absorption_risk"),
+                "abs": cvd_data.get("absorption_risk"),
                 "sq": {
-                    "sc": squeeze_result.get("squeeze_score"),
-                    "st": squeeze_result.get("status"),
-                    "it": squeeze_result.get("intensity")
+                    "sc": indicators.get("squeeze", {}).get("squeeze_score"),
+                    "st": indicators.get("squeeze", {}).get("status"),
+                    "it": indicators.get("squeeze", {}).get("intensity"),
+                    "isq": indicators.get("squeeze", {}).get("is_squeeze"),
+                    "em": indicators.get("squeeze", {}).get("emoji")
                 },
                 "tr": cvd_data.get("trend"),
                 "em": cvd_data.get("emoji")
