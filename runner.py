@@ -175,9 +175,15 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 "sp": ob_data.get("spread_bps")  # spread in bps
             },
             "cvd": {  # cumulative volume delta
-                "st": cvd_data.get("status"),  # status
-                "ar": round(cvd_data.get("aggression_ratio", 1), 2),  # aggression_ratio
-                "d": cvd_data.get("cvd_sum")  # delta value (CORRECTION: cvd_sum from analyzer)
+                "st": cvd_data.get("trend") if cvd_data.get("mtf_data") else cvd_data.get("status"),
+                "ar": round(cvd_data.get("composite_score", 50) / 50 if cvd_data.get("mtf_data") else cvd_data.get("aggression_ratio", 1), 2),
+                "d": cvd_data.get("net_cvd") if cvd_data.get("mtf_data") else cvd_data.get("cvd_sum"),
+                # New MTF Data fields
+                "mtf": cvd_data.get("mtf_data"),
+                "cs": cvd_data.get("composite_score"),
+                "cf": cvd_data.get("confluence"),
+                "tr": cvd_data.get("trend"),
+                "em": cvd_data.get("emoji")
             },
             "vp": {  # volume_profile
                 "poc": vp_data.get("poc"),
