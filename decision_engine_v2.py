@@ -440,6 +440,12 @@ class DecisionEngineV2:
         whale_modifier = max(-5, min(5, whale_modifier))
         adjusted_score = max(0, min(100, adjusted_score + whale_modifier))
         
+        # 4d. Structural Quality Filter (AMT)
+        final_score = self._apply_structural_quality_filter(adjusted_score)
+        if final_score != adjusted_score:
+            print(f"   🛡️ STRUCTURAL FILTER: Neutralizing score (Edge not clear)")
+            adjusted_score = final_score
+        
         # 5. Déterminer la direction initiale (basée sur le score)
         direction = self._determine_direction(dimension_scores)
         
@@ -1444,6 +1450,29 @@ class DecisionEngineV2:
             'fear_greed': self.sentiment.get('fear_greed', {}).get('value', 50)
         }
     
+    def _apply_structural_quality_filter(self, score: float) -> float:
+        """
+        Refines the signal by filtering out low-quality zones (AMT)
+        Force NO_TRADE if stuck in balance without clear driver.
+        """
+        vp_context = self.vp.get('context', 'NEUTRAL')
+        regime = self.vp.get('regime', 'BALANCE')
+        oi_trend = self.oi.get('signal', {}).get('sentiment', 'NEUTRAL')
+        
+        # 1. POC Danger Zone (High Efficiency = No Edge)
+        if vp_context == 'STUCK_AT_POC' and regime == 'BALANCE':
+            # Even if technicals suggest something, if OI is dropping, stay out
+            if oi_trend == 'BEARISH' or abs(score - 50) < 15:
+                return 50.0 # Force Neutral -> NO_SIGNAL
+                
+        # 2. Gap Traversal without Momentum
+        if vp_context == 'TRAVERSING_LIQUID_GAP':
+            adx_val = self.adx.get('adx', 0)
+            if adx_val < 20: # No trend
+                return 50.0 # Don't gamble on the gap without momentum
+                
+        return score
+
     def _get_signal_strength(self, score: float) -> str:
         """Retourne la force du signal"""
         if score >= self.CONFIDENCE_THRESHOLDS['STRONG']:
