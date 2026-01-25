@@ -193,7 +193,7 @@ class CVDAnalyzer:
             # Improved Proxy: Split volume based on body/wick ratio could be better, 
             # but simple Close > Open is standard for basic CVD proxies.
             close = float(candle.get('close', 0))
-            open_ price = float(candle.get('open', 0))
+            open_price = float(candle.get('open', 0))
             vol = float(candle.get('volume', 0))
             
             if close >= open_price:
