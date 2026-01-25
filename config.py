@@ -28,7 +28,7 @@ MTF_TIMEFRAMES = ['5m', '1h', '1d']
 # ==========================================
 # ORDER BOOK PARAMETERS
 # ==========================================
-ORDER_BOOK_LIMIT = 50  # Nombre de niveaux à récupérer
+ORDER_BOOK_LIMIT = 400  # Nombre de niveaux à récupérer
 
 # ==========================================
 # CVD PARAMETERS

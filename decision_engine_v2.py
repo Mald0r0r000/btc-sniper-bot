@@ -147,16 +147,16 @@ class DecisionEngineV2:
         'sentiment': 5,
         'macro': 10
     },
-    # Intraday 1H-2D - Optimisé pour signaux court/moyen terme
-    # Macro/OnChain réduits (lag trop important), Technical/Derivatives boostés
+    # Intraday 1H-2D - Optimisé (Post-Backtest 2026)
+    # Findings: OI & CVD are King. KDJ needs to be inverted. OB is noise.
     'intraday_1h_2d': {
-        'technical': 35,        # +10 (order flow is king pour intraday)
-        'structure': 20,        # +5 (FVG, support/resistance critiques)
-        'multi_exchange': 15,   # Inchangé (funding divergence reste pertinent)
-        'derivatives': 18,      # +3 (liquidations = catalyst #1 intraday)
-        'onchain': 5,           # -5 (trop lent pour 1H-2D, sauf whale panic)
-        'sentiment': 5,         # -5 (contexte uniquement)
-        'macro': 2              # -8 (noise pour intraday, sauf événements extrêmes)
+        'technical': 40,        # +5 (Boost CVD impact)
+        'structure': 15,        # -5 (Less critical than flow)
+        'multi_exchange': 10,   # -5 (Focus on main liquidity)
+        'derivatives': 25,      # +7 (OI is the best predictor at +0.19)
+        'onchain': 5,           
+        'sentiment': 5,         
+        'macro': 0              # Zero weight for intraday (noise)
     }
 }
     
@@ -275,8 +275,7 @@ class DecisionEngineV2:
         
         # Smart Entry Analyzer (Using 1h candles for robustness)
         self.smart_entry_analyzer = SmartEntryAnalyzer()
-
-
+ 
         
         # Fluid Dynamics data
         self.venturi = venturi_data or {}
@@ -416,10 +415,21 @@ class DecisionEngineV2:
         adjusted_score = max(0, min(100, adjusted_score + self.consistency_bonus))
         
         # 4b. Appliquer les modifiers Fluid Dynamics
+        # UPDATE: INVERT Logic for Venturi here to match findings (Pressure = Reversal)
+        # We handle this inside _score_venturi logic normally, or here globally.
+        # But wait, self.venturi dict usually contains 'signal_modifier'.
+        # Let's adjust it by checking the raw 'direction' and reversing implication if it's based on pressure.
+        
         venturi_modifier = self.venturi.get('signal_modifier', 0)
         self_trading_modifier = self.self_trading.get('signal_modifier', 0)
-        fluid_dynamics_modifier = venturi_modifier + self_trading_modifier
-        adjusted_score = max(0, min(100, adjusted_score + fluid_dynamics_modifier))
+        
+        # If Venturi detected "UP" based on pressure, we want to negate or invert that for mean reversion
+        # For now, let's trust the existing logic if we update the analyzer later,
+        # OR just reduce its impact here if we are unsure.
+        # Backtest showed -0.13 correlation. So +10 for Venturi Up is actually bearish.
+        # Let's simple INVERT the venturi modifier.
+        
+        adjusted_score = max(0, min(100, adjusted_score - venturi_modifier + self_trading_modifier))
         
         # 4c. Appliquer le modifier Hyperliquid Whale Sentiment (réduit pour intraday)
         whale_modifier = self.hyperliquid.get('signal_modifier', 0)
@@ -603,22 +613,25 @@ class DecisionEngineV2:
         """Score technique (50 = neutre)"""
         score = 50.0
         
-        # Order Book imbalance
+        # Order Book imbalance (Weight: LOW - Not predictive in backtest)
+        # Reduced max impact from 20 to 10
         bid_ratio = self.ob.get('bid_ratio_pct', 50)
         if bid_ratio > 60:
-            score += (bid_ratio - 50) * 0.4  # Max +20
+            score += (bid_ratio - 50) * 0.2  # Reduced
         elif bid_ratio < 40:
-            score -= (50 - bid_ratio) * 0.4  # Max -20
+            score -= (50 - bid_ratio) * 0.2  # Reduced
         
-        # CVD
+        # CVD (Weight: HIGH - Predictive)
+        # Increased impact from 15 to 25
         agg_ratio = self.cvd.get('aggression_ratio', 1.0)
         if agg_ratio > 1.2:
-            score += 15
+            score += 25
         elif agg_ratio < 0.8:
-            score -= 15
-        
-        # Volume Profile - CONTEXTUAL ANALYSIS
-        # Shape + Price Position = True Market Context
+            score -= 25
+        elif agg_ratio > 1.1:
+            score += 10
+        elif agg_ratio < 0.9:
+            score -= 10Price Position = True Market Context
         vp_shape = self.vp.get('shape', 'D-Shape')
         poc = self.vp.get('poc', 0)
         vah = self.vp.get('vah', 0)
@@ -670,17 +683,30 @@ class DecisionEngineV2:
                     pass
             
         # KDJ Momentum (Oscillator)
-        # Updated Logic: Parabolic Reversal & Slope
-        kdj_signal = self.kdj.get('signal', 'NEUTRAL')
+        # Updated Logic (User Correction + Statistical Analysis):
+        # High J (>80) = Overbought/Sell -> Penalize Score
+        # Low J (<20) = Oversold/Buy -> Boost Score
+        # This aligns with the negative correlation found (-0.36)
         
-        if kdj_signal == 'PARABOLIC_BULL':
-            score += 25  # Strong reversal signal
-        elif kdj_signal == 'PARABOLIC_BEAR':
-            score -= 25  # Strong reversal signal
-        elif kdj_signal == 'GOLDEN_CROSS': # Fallback if standard logic persists
-             score += 5
-        elif kdj_signal == 'DEAD_CROSS':
-             score -= 5
+        kdj_values = self.kdj.get('values', {})
+        j_val = kdj_values.get('j', 50)
+        
+        # Penalize High J (Overbought)
+        if j_val > 80:
+            penalty = (j_val - 80) * 1.5  # Max penalty ~30 points if J=100
+            score -= penalty
+            
+        # Boost Low J (Oversold)
+        elif j_val < 20:
+            bonus = (20 - j_val) * 1.5    # Max bonus ~30 points if J=0
+            score += bonus
+            
+        # Slope confirmation (only if favorable)
+        j_slope = kdj_values.get('j_slope', 0)
+        if j_val < 20 and j_slope > 0:
+            score += 5 # Turning up from oversold
+        elif j_val > 80 and j_slope < 0:
+            score -= 5 # Turning down from overbought
         
         # ========== ADX MULTIPLIER (Trend Strength Amplifier) ==========
         # ADX doesn't tell direction, it tells confidence
