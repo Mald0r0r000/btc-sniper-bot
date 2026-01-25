@@ -128,6 +128,11 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     print(f"   📊 CVD (MTF): {cvd_result['emoji']} {cvd_result['trend']} (Score: {cvd_result['composite_score']}) | Confluence: {cvd_result['confluence']}")
     if cvd_result.get('absorption_risk'):
         print("      ⚠️ ABSORPTION DETECTED: Passive liquidity is blocking aggression.")
+        
+    agg_status = cvd_result.get('aggression_status', 'BALANCED')
+    if agg_status != 'BALANCED':
+        agg_emoji = "🔥" if agg_status == 'BULLISH_AGGRESSION' else "🩸"
+        print(f"      {agg_emoji} {agg_status.replace('_', ' ')}: Active market orders are pushing.")
 
     if cvd_result.get('mtf_data'):
         print("      Timeframe | Net CVD | Vol Buy | Vol Sell | Ratio | Trend")

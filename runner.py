@@ -192,6 +192,7 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 "cs": cvd_data.get("composite_score"),
                 "cf": cvd_data.get("confluence"),
                 "abs": cvd_data.get("absorption_risk"),
+                "ag": cvd_data.get("aggression_status"), # Aggression status (BULLISH_AGGRESSION, etc)
                 "sq": {
                     "sc": indicators.get("squeeze", {}).get("squeeze_score"),
                     "st": indicators.get("squeeze", {}).get("status"),

@@ -184,6 +184,21 @@ class CVDAnalyzer:
             
         # Global Absorption Risk
         absorption_risk = any(mtf_data[tf].get('is_absorption', False) for tf in mtf_data)
+        
+        # Aggression Detection (User Request)
+        agg_types = []
+        for tf in ['5m', '1h', '4h']: # Focus on intraday agression
+            if mtf_data[tf]['available']:
+                ratio = mtf_data[tf]['aggression_ratio']
+                if ratio > 1.25: agg_types.append('BULLISH')
+                elif ratio < 0.75: agg_types.append('BEARISH')
+        
+        if agg_types.count('BULLISH') > agg_types.count('BEARISH'):
+            aggression_status = 'BULLISH_AGGRESSION'
+        elif agg_types.count('BEARISH') > agg_types.count('BULLISH'):
+            aggression_status = 'BEARISH_AGGRESSION'
+        else:
+            aggression_status = 'BALANCED'
             
         return {
             'mtf_data': mtf_data,
@@ -192,6 +207,7 @@ class CVDAnalyzer:
             'trend': overall_trend,
             'emoji': emoji,
             'absorption_risk': absorption_risk,
+            'aggression_status': aggression_status,
             'available': True
         }
 
