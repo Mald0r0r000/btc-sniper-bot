@@ -150,13 +150,13 @@ class DecisionEngineV2:
     # Intraday 1H-2D - Optimisé (Post-Backtest 2026)
     # Findings: OI & CVD are King. KDJ needs to be inverted. OB is noise.
     'intraday_1h_2d': {
-        'technical': 40,        # +5 (Boost CVD impact)
-        'structure': 15,        # -5 (Less critical than flow)
-        'multi_exchange': 10,   # -5 (Focus on main liquidity)
-        'derivatives': 25,      # +7 (OI is the best predictor at +0.19)
+        'technical': 35,        # Adjusted (-5)
+        'structure': 15,        
+        'multi_exchange': 10,   
+        'derivatives': 25,      
         'onchain': 5,           
         'sentiment': 5,         
-        'macro': 0              # Zero weight for intraday (noise)
+        'macro': 5              # +5 (Activé avec nouvelle logique DXY)
     }
 }
     
@@ -890,49 +890,45 @@ class DecisionEngineV2:
         return score
     
     def _score_macro(self) -> float:
-        """Score macro (cross-asset intelligence: DXY, M2, SPX)"""
+        """
+        Score macro REFONDU (User Request):
+        - 80% Poids sur DXY (Corrélation prouvée)
+        - Règles conditionnelles pour SPX/M2 (Chocs uniquement)
+        """
         score = 50.0
         
         if not self.macro:
             return score
-        
-        risk_env = self.macro.get('risk_environment', {})
-        risk_score = risk_env.get('risk_score', 50)
-        
-        # Risk-on = bullish for BTC
-        score = risk_score
-        
-        # ========== CROSS-ASSET INTELLIGENCE ==========
-        # DXY (Dollar Index) - Inverse correlation with BTC
+            
+        # 1. DXY DOMINANCE (80% de l'impact standard)
+        # Corrélation Inverse: DXY Monte -> BTC Baisse
         dxy = self.cross_asset.get('dxy', {})
         dxy_change = dxy.get('daily_change', 0)
         
-        if dxy_change > 1:
-            score -= 10  # Strong dollar = pressure on risk assets
-        elif dxy_change > 0.5:
-            score -= 5
-        elif dxy_change < -1:
-            score += 10  # Weak dollar = bullish for BTC
-        elif dxy_change < -0.5:
-            score += 5
+        # Formule: -20 points par 1% de variation DXY
+        # Exemple: DXY +0.5% -> Score -10 (40)
+        # Exemple: DXY -0.5% -> Score +10 (60)
+        dxy_impact = dxy_change * -20
+        score += dxy_impact
         
-        # M2 Money Supply (Liquidity) - 90-day lagged correlation
-        m2 = self.cross_asset.get('m2', {})
-        m2_trend = m2.get('offset_90d_trend', 'STABLE')
+        # 2. RÈGLES DE CHOC (SPX & M2)
+        # Ne s'activent qu'en cas de mouvement violent
         
-        if m2_trend == 'EXPANDING':
-            score += 5  # More liquidity = bullish long-term
-        elif m2_trend == 'CONTRACTING':
-            score -= 5  # Less liquidity = bearish pressure
-        
-        # SPX (Stock Market) - Risk-on/Risk-off proxy
+        # SPX: Crash Protection
         spx = self.cross_asset.get('spx', {})
         spx_change = spx.get('daily_change', 0)
         
-        if spx_change > 1.5:
-            score += 5  # Strong risk-on environment
-        elif spx_change < -1.5:
-            score -= 5  # Risk-off, potential contagion
+        if spx_change < -2.0: # Krach boursier (> -2%)
+            score -= 25 # Pénalité majeure "Risk Off"
+        elif spx_change > 2.0: # Rallye euphorique
+            score += 15 # Boost "Risk On"
+            
+        # M2: Liquidity Crisis
+        m2 = self.cross_asset.get('m2', {})
+        m2_yoy = m2.get('yoy_change', 0)
+        
+        if m2_yoy < -5.0: # Contraction sévère (Crise de liquidité)
+            score -= 20
         
         return max(0, min(100, score))
     
