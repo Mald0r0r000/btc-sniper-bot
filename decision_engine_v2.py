@@ -642,25 +642,24 @@ class DecisionEngineV2:
         elif confluence == 'ALL_BEARISH':
             score -= 5
         
-        # Volume Profile: Structural Context (R&D Point 3)
+        # Volume Profile: Structural Context (R&D Point 3 - refined with AMT)
         vp_context = self.vp.get('context', 'NEUTRAL')
         
-        # Scoring based on structural position
-        if vp_context == 'BREAKOUT_HIGH':
-            score += 15 # Bullish trend continuation
-        elif vp_context == 'BREAKDOWN_LOW':
-            score -= 15 # Bearish trend continuation
-        elif vp_context == 'TRAVERSING_GAP':
-            # Price in a Low Volume Node (LVN) - fast traversal expected
-            # We align with previous trend or momentum
-            score += (5 if score > 50 else -5)
-        elif vp_context == 'VA_ROTATION_UP':
-            score += 10 # Rotating from POC to VAH
-        elif vp_context == 'VA_ROTATION_DOWN':
-            score -= 10 # Rotating from POC to VAL
-        elif vp_context == 'POC_STUCK':
-            # Mean reversion risk or chop - pull towards neutral
-            score = 50 + (score - 50) * 0.5
+        # Scoring based on structural position (Auction Market Theory)
+        if vp_context == 'IMBALANCE_EXPANSION_UP':
+            score += 20 # Strong breakout confirmed by structure
+        elif vp_context == 'IMBALANCE_EXPANSION_DOWN':
+            score -= 20 # Strong breakdown confirmed by structure
+        elif vp_context == 'TRAVERSING_LIQUID_GAP':
+            # Fast travel zone - follow momentum
+            score += (10 if score > 50 else -10)
+        elif vp_context == 'VALUE_AREA_ROTATION_UP':
+            score += 10 # Mean reversion from POC to VAH
+        elif vp_context == 'VALUE_AREA_ROTATION_DOWN':
+            score -= 10 # Mean reversion from POC to VAL
+        elif vp_context == 'STUCK_AT_POC':
+            # High efficiency zone - price sticky - pull towards neutral
+            score = 50 + (score - 50) * 0.4
             
         # Varies slightly based on POC proximity
         poc = self.vp.get('poc', 0)

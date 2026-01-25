@@ -145,7 +145,10 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     # Volume Profile Analysis
     vp_analyzer = VolumeProfileAnalyzer(df_micro)
     vp_result = vp_analyzer.analyze(current_price)
-    print(f"   📊 Volume Profile: {vp_result['context']} ({len(vp_result.get('lvns', []))} gaps)")
+    regime_emoji = "⚖️" if vp_result['regime'] == 'BALANCE' else "🚀"
+    print(f"   📊 Volume Profile: {regime_emoji} {vp_result['regime']} | Context: {vp_result['context']}")
+    if vp_result.get('target_price'):
+        print(f"      🎯 Structural Target: ${vp_result['target_price']:,.2f}")
     print(f"      POC: ${vp_result['poc']:,.2f} | VAH: ${vp_result['vah']:,.2f} | VAL: ${vp_result['val']:,.2f}")
     
     # FVG Analysis (MTF)

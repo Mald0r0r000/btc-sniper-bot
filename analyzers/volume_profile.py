@@ -70,50 +70,84 @@ class VolumeProfileAnalyzer:
         vah = max(value_area_prices)
         val = min(value_area_prices)
         
-        # R&D: LVN (Low Volume Node) Detection - The "Gaps"
-        # We look for bins inside the Value Area with significantly less volume than average
+        # R&D: Structural Nodes (AMT Approach)
         avg_va_vol = accumulated_vol / len(value_area_prices)
-        lvns = []
-        # Check every 3 bins to find significant gaps
-        va_range_profile = profile.loc[val:vah]
-        for price, vol in va_range_profile.items():
-            if vol < avg_va_vol * 0.3: # Less than 30% of average VA volume
-                lvns.append(round(float(price), 2))
         
-        # Contextual logic if current_price is provided
+        # 1. HVNs (High Volume Nodes) - The Targets/Magnets
+        hvns = []
+        for price, vol in profile.items():
+            if vol > avg_va_vol * 1.5: # 50% above average
+                hvns.append(round(float(price), 2))
+        
+        # 2. LVN Zones (Gap grouping)
+        lvn_bins = []
+        for price, vol in profile.loc[val:vah].items():
+            if vol < avg_va_vol * 0.3:
+                lvn_bins.append(float(price))
+                
+        # Group adjacent bins into zones
+        gap_zones = []
+        if lvn_bins:
+            lvn_bins.sort()
+            current_zone = [lvn_bins[0]]
+            for i in range(1, len(lvn_bins)):
+                if lvn_bins[i] - lvn_bins[i-1] <= self.bin_size * 1.1:
+                    current_zone.append(lvn_bins[i])
+                else:
+                    gap_zones.append({'min': min(current_zone), 'max': max(current_zone)})
+                    current_zone = [lvn_bins[i]]
+            gap_zones.append({'min': min(current_zone), 'max': max(current_zone)})
+
+        # 3. Regime & Context
+        regime = "BALANCE"
         context = "NEUTRAL"
+        target_price = None
+        
         if current_price:
-            context = self._determine_context(current_price, poc, vah, val, lvns)
+            regime = "IMBALANCE" if (current_price > vah or current_price < val) else "BALANCE"
+            context, target_price = self._determine_amt_context(current_price, poc, vah, val, hvns, gap_zones)
             
         return {
             'poc': round(poc, 2),
             'vah': round(vah, 2),
             'val': round(val, 2),
-            'lvns': lvns, # List of gap levels
+            'hvns': hvns[:5], # Top 5 targets
+            'gap_zones': gap_zones,
+            'regime': regime,
             'context': context,
+            'target_price': target_price,
             'total_volume': round(total_vol, 2),
             'price_range': {'min': round(price_min, 2), 'max': round(price_max, 2)}
         }
 
-    def _determine_context(self, price: float, poc: float, vah: float, val: float, lvns: List[float]) -> str:
-        """Determines the market context relative to the profile structure"""
-        buffer = (vah - val) * 0.05 if vah > val else 0
+    def _determine_amt_context(self, price: float, poc: float, vah: float, val: float, 
+                              hvns: List[float], gap_zones: List[Dict]) -> tuple:
+        """Determines context based on Auction Market Theory"""
+        buffer = (vah - val) * 0.02 # 2% buffer
         
-        # 1. Extreme Levels (Rejections)
-        if price > vah + buffer: return "BREAKOUT_HIGH"
-        if price < val - buffer: return "BREAKDOWN_LOW"
-        
-        # 2. Near Gaps (Fast Travel Zones)
-        for lvn in lvns:
-            if abs(price - lvn) / lvn < 0.001: # Within 0.1%
-                return "TRAVERSING_GAP"
-        
-        # 3. Value Area Rotation
-        if price > poc + buffer: return "VA_ROTATION_UP"
-        if price < poc - buffer: return "VA_ROTATION_DOWN"
-        
-        # 4. Stuck at POC
-        return "POC_STUCK"
+        # 1. Imbalance States (Breakouts)
+        if price > vah + buffer:
+            # Finding next HVN target above
+            target = min([h for h in hvns if h > price], default=price * 1.01)
+            return "IMBALANCE_EXPANSION_UP", round(target, 2)
+        if price < val - buffer:
+            target = max([h for h in hvns if h < price], default=price * 0.99)
+            return "IMBALANCE_EXPANSION_DOWN", round(target, 2)
+            
+        # 2. Fast Travel (Gaps)
+        for zone in gap_zones:
+            if zone['min'] <= price <= zone['max']:
+                # If in a gap, the target is the next HVN in direction of momentum
+                target = poc # Default to POC as major magnet
+                return "TRAVERSING_LIQUID_GAP", round(target, 2)
+                
+        # 3. Balance Rotations
+        if price > poc:
+            return "VALUE_AREA_ROTATION_UP", round(vah, 2)
+        if price < poc:
+            return "VALUE_AREA_ROTATION_DOWN", round(val, 2)
+            
+        return "STUCK_AT_POC", round(poc, 2)
 
     def _get_session_data(self) -> pd.DataFrame:
         if 'timestamp' not in self.df.columns:

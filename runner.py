@@ -207,8 +207,10 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 "poc": vp_data.get("poc"),
                 "vah": vp_data.get("vah"),
                 "val": vp_data.get("val"),
+                "reg": vp_data.get("regime"), # Regime (BALANCE/IMBALANCE)
                 "ctx": vp_data.get("context"), # Context (VA_ROTATION, etc)
-                "gaps": vp_data.get("lvns", []), # Low Volume Nodes
+                "tgt": vp_data.get("target_price"), # Structural target
+                "gz": vp_data.get("gap_zones", []), # Grouped Gaps
                 # Price context
                 "pctx": "ABOVE_VAH" if report.get("price", 0) > vp_data.get("vah", 0) and vp_data.get("vah", 0) > 0
                         else "BELOW_VAL" if report.get("price", 0) < vp_data.get("val", 0) and vp_data.get("val", 0) > 0
