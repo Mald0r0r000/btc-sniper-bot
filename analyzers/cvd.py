@@ -131,6 +131,8 @@ class CVDAnalyzer:
                 
                 mtf_data[tf] = {
                     'net_cvd': round(net_cvd, 4),
+                    'buy_volume': round(buy_vol, 4),
+                    'sell_volume': round(sell_vol, 4),
                     'aggression_ratio': round(agg_ratio, 2),
                     'trend': trend,
                     'score': round(score, 1),
@@ -140,6 +142,8 @@ class CVDAnalyzer:
             else:
                 mtf_data[tf] = {
                     'net_cvd': 0,
+                    'buy_volume': 0,
+                    'sell_volume': 0,
                     'aggression_ratio': 1.0,
                     'trend': 'NEUTRAL',
                     'score': 50,
