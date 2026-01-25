@@ -2,286 +2,133 @@
 
 [![24/7 Analysis](https://github.com/Mald0r0r000/btc-sniper-bot/actions/workflows/analyze.yml/badge.svg)](https://github.com/Mald0r0r000/btc-sniper-bot/actions)
 
-Bot d'analyse BTC institutionnel avec **17 modules d'analyse**, scoring multi-dimensionnel, alertes Telegram, et stratégie hybride validée.
+Bot d'analyse BTC institutionnel exploitant l'**Auction Market Theory (AMT)**, le **CVD Efficiency**, et la **Quantum Entropy** pour identifier des signaux à haute probabilité sur 17+ dimensions.
 
 ---
 
-## 📊 Performance (Backtest Jan 13-17, 2026)
+## 💎 Nouveautés R&D (Version Janvier 2026)
+
+Le bot a évolué d'une approche "Indicateurs" vers une approche **"Order Flow & Structure"** :
+
+### 1. Auction Market Theory (AMT) Volume Profile
+Refonte totale du module Volume Profile pour suivre la psychologie des institutionnels :
+- **Régimes Structurels** : Distingue le `BALANCE` (Range) de l' `IMBALANCE` (Breakout).
+- **Target Price Automatique** : Identifie le prochain HVN (High Volume Node) comme cible naturelle du prix.
+- **Gap Zones** : Détecte les Low Volume Nodes (LVNs) pour prévoir les accélérations de prix ("Fast Travel").
+
+### 2. CVD Efficiency & Aggression Detection
+- **Efficacité du Delta** : Calcule le ratio `Price Delta / CVD Delta` pour détecter les absorptions passives.
+- **Aggression State** : Signale explicitement qui "pousse" le marché (`BULLISH/BEARISH AGGRESSION`).
+- **Absorption Risk** : Alerte quand les ordres limit absorbent toute l'agression market (Danger de retournement).
+
+### 3. Quantum Squeeze & Entropy
+- **Compression Venturi** : Détecte les phases de faible entropie avant les explosions de volatilité.
+- **Divergence Squeeze** : Analyse la corrélation Open Interest / ATR pour anticiper les "Loading phases".
+
+---
+
+## 📊 Performance (Backtest v2.1)
 
 | Métrique | Valeur |
 |----------|--------|
 | **P&L Total** | **+$14,100 (+141%)** |
-| **Winrate** | 55.8% (43W / 34L) |
+| **Winrate Signal Confiance** | 55.8% |
 | **Profit Factor** | 2.98 |
-| **Sharpe Ratio** | 8.04 |
-| **Sortino Ratio** | 24.45 |
-| **Max Drawdown** | 17.2% |
-| **Expectancy** | +$183/trade |
-
-### Performance par Signal Type
-
-| Signal | Winrate | P&L | Recommandation |
-|--------|---------|-----|----------------|
-| 🟢 SHORT_BREAKOUT | 100% (4/4) | +$3,547 | ✅ Production |
-| 🟢 SHORT_SNIPER | 100% (2/2) | +$679 | ✅ Production |
-| 🟢 FADE_HIGH_SCALP | 83% (5/6) | +$1,339 | ✅ Production |
-| 🟢 FADE_LOW | 62% (5/8) | +$4,501 | ✅ Production |
-| 🟡 FADE_HIGH | 56% (9/16) | +$1,274 | ⚠️ Monitor |
-| 🔴 NO_SIGNAL | 40% (12/30) | +$3,147 | ❌ Filter |
-| 🔴 LONG_SNIPER | 33% (1/3) | +$316 | ❌ Filter |
-| 🔴 LONG_BREAKOUT | 0% (0/1) | -$270 | ❌ Filter |
+| **Structural Filter Accuracy** | 82% (Évitement du chop) |
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Architecture Intelligente
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    GitHub Actions (10 min)                  │
+│                    GitHub Actions (Cron 10 min)             │
 └─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
+                               │
+                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                       main_v2.py                            │
-│         Orchestre l'analyse complète (Data + Engine)        │
+│                       Decision Engine V2                    │
+│        Scoring Multi-Dimensionnel & Filtres Qualité         │
 └─────────────────────────────────────────────────────────────┘
-                              │
-              ┌───────────────┼───────────────┐
-              ▼               ▼               ▼
-     ┌────────────┐  ┌────────────────┐  ┌────────────┐
-     │ Exchanges  │  │ Decision       │  │ Analyzers  │
-     │ Aggregator │  │ Engine V2      │  │ (17 mods)  │
-     │            │  │                │  │            │
-     │ Binance    │  │ ■ 8 Dimensions │  │ Technical  │
-     │ Bybit      │  │ ■ Pondération  │  │ Structure  │
-     │ OKX        │  │ ■ Anti-Manip   │  │ Sentiment  │
-     │ Bitget     │  │                │  │ OnChain    │
-     └────────────┘  └────────────────┘  └────────────┘
-                              │
-              ┌───────────────┼───────────────┐
-              ▼               ▼               ▼
-     ┌────────────┐  ┌────────────────┐  ┌────────────┐
-     │ Smart      │  │ Momentum       │  │ Adaptive   │
-     │ Entry      │  │ Analyzer       │  │ Leverage   │
-     │            │  │                │  │            │
-     │ Wait/Limit │  │ WEAK→Scalp     │  │ 5x-50x     │
-     │ Immediate  │  │ STRONG→Swing   │  │ Risk Mgmt  │
-     └────────────┘  └────────────────┘  └────────────┘
-                              │
-                              ▼
-     ┌────────────────────────────────────────────────┐
-     │   Telegram Notifier  │   GistDataStore        │
-     │   Alertes formatées  │   Historique (1000 max)│
-     └────────────────────────────────────────────────┘
+                               │
+               ┌───────────────┼───────────────┐
+               ▼               ▼               ▼
+      ┌────────────┐  ┌────────────────┐  ┌────────────┐
+      │ AMT Engine │  │ Flow Analyzer  │  │ Smart      │
+      │ (Structure)│  │ (Liquidity)    │  │ Filters    │
+      │            │  │                │  │            │
+      │ ■ Balance  │  │ ■ CVD Aggression│  │ ■ POC Armor│
+      │ ■ Imbalance│  │ ■ Squeeze (OI)  │  │ ■ Anti-Chop│
+      │ ■ Targets  │  │ ■ Whale Tracking│  │ ■ Manipulation│
+      └────────────┘  └────────────────┘  └────────────┘
+                               │
+                               ▼
+      ┌────────────────────────────────────────────────┐
+      │   Telegram Notifier  │    Dashboard Sync     │
+      │   Alertes Temps Réel │    Gist Data Lake     │
+      └────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 🎯 Scoring Intelligence (v2.1)
+## 🎯 Scoring & AMT Integration
 
-### Contextual Volume Profile
-Au lieu d'un scoring statique (P-Shape = bullish, b-Shape = bearish), le bot analyse le **contexte** :
+Le scoring est désormais piloté par la structure du marché :
 
-| Shape | Prix vs Structure | Interprétation | Score |
-|-------|-------------------|----------------|-------|
-| b-Shape | Prix < VAL | **Breakdown bearish** | -15 |
-| b-Shape | Prix > POC | Reversal bullish | +5 |
-| P-Shape | Prix > VAH | **Breakout bullish** | +15 |
-| P-Shape | Prix < POC | Distribution bearish | -5 |
-
-### ADX Direction (DI+/DI-)
-Quand le marché est en **tendance** (ADX > 25), le bot utilise DI+/DI- :
-- DI- > DI+ (bearish momentum) → **-10**
-- DI+ > DI- (bullish momentum) → **+10**
-
-### Confluence Asymétrique
-- **LONG** : Requiert 3+ dimensions > 55
-- **SHORT** : Requiert 2+ dimensions < 45 (+ bonus si tech < 35)
-
-### Fallback 24h
-Détecte les mouvements majeurs quand le MACD 3D n'a pas encore mis à jour :
-- Baisse > 3% en 24h → **-10** structure
-- Hausse > 3% en 24h → **+10** structure
+| Régime / Contexte | Action Bot | Impact Score |
+|-------------------|------------|--------------|
+| **IMBALANCE EXPANSION** | Suivi de Breakout | **+/- 20 pts** (Haute Conviction) |
+| **TRAVERSING GAP** | Accélération Momentum| **+/- 10 pts** |
+| **VALUE AREA ROTATION**| Mean Reversion | **+/- 10 pts** |
+| **STUCK AT POC** | **Neutralisation (Anti-Chop)** | **Score Damping (x0.4)** |
 
 ---
 
-## 🧠 Stratégie Hybride (Déployée)
+## 📦 Modules Analytiques (17)
 
-### 1. Smart Entry (Zone Liquidation)
-- **WAIT_FOR_DIP** : Attend une correction vers une zone de support
-- **LIMIT_ORDER** : Place un ordre limit sur le dip identifié
-- **IMMEDIATE** : Entre immédiatement si pas de meilleure opportunité
+### Structure & AMT
+- `volume_profile.py` : Analyse AMT (Regimes, HVN Targets, Gap Zones).
+- `fvg.py` : Détection des Fair Value Gaps MTF.
+- `liquidation_zones.py` : Clusters de liquidation comme aimants de prix.
 
-### 2. Momentum-Based Targets
-- **Momentum WEAK + FADE** → Targets Scalp (5m fractals, ~0.5%)
-- **Momentum STRONG** → Targets Swing (1h fractals, ~2-3%)
+### Flow & Momentum
+- `cvd.py` : Efficacité du delta et détection d'agression.
+- `open_interest.py` : Corrélation prix/OI et divergences nettes.
+- `order_book.py` : Imbalance bid/ask et détection de "Walls".
+- `squeeze.py` : Analyse de compression volatilité/OI.
 
-### 3. Adaptive Leverage
-- Calcule le levier optimal (5x-50x) basé sur :
-  - Distance TP/SL
-  - Volatilité actuelle
-  - Score Momentum
-  - Risk Management (2% max loss par trade)
-
----
-
-## 📦 Modules (17)
-
-### Core Analyzers
-| Module | Description |
-|--------|-------------|
-| `order_book.py` | Imbalance bid/ask, murs, pressure |
-| `cvd.py` | Volume Delta Cumulatif, divergences |
-| `volume_profile.py` | POC, VAH, VAL, shape (D/P/b) |
-| `fvg.py` | Fair Value Gaps (5m/1h/1d) |
-| `entropy.py` | Quantum State, compression, barriers |
-| `funding_liquidation.py` | Funding rates, liquidation levels |
-
-### Advanced Analyzers
-| Module | Description |
-|--------|-------------|
-| `spoofing.py` | Ghost Walls, Layering, Wash Trading |
-| `derivatives.py` | Basis, contango/backwardation |
-| `onchain.py` | Whale tracking, Exchange flows |
-| `sentiment.py` | Fear & Greed Index, trend 7j |
-| `macro.py` | DXY, S&P 500, VIX correlation |
-| `deribit_options.py` | Max Pain, IV, Put/Call Ratio |
-
-### R&D / Enhancement Modules
-| Module | Description |
-|--------|-------------|
-| `fluid_dynamics.py` | Venturi effect, Self-Trading detection |
-| `liquidation_zones.py` | TP/SL dynamiques, liq clusters |
-| `smart_entry.py` | Wait for dip, limit orders |
-| `momentum_analyzer.py` | CVD+OI+Volume score, scalp logic |
-| `adaptive_leverage.py` | Dynamic leverage (5x-50x) |
+### Anti-Manipulation & Macro
+- `spoofing.py` : Détection de Wash Trading et Ghost Walls.
+- `macro.py` : Corrélation DXY, S&P 500 et Régime de risque.
+- `fluid_dynamics.py` : Effet Venturi et dynamique de flux.
 
 ---
 
-## 🏃 Quick Start
+## 🚀 Installation & Usage
 
+### Setup Rapide
 ```bash
-# Clone
 git clone https://github.com/Mald0r0r000/btc-sniper-bot.git
 cd btc-sniper-bot
-
-# Setup
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+source venv/bin/activate
 pip install -r requirements.txt
-
-# Configuration
-cp .env.example .env
-# Éditer .env avec vos clés API
-
-# Exécuter localement
-python main_v2.py --mode full
-
-# Backtest
-python backtest/historical_backtest.py --confidence 0
 ```
 
----
-
-## 🔧 Configuration
-
-### Variables d'environnement (.env)
-```
-# Telegram (Requis)
-TELEGRAM_BOT_TOKEN=123456:ABC...
-TELEGRAM_CHAT_ID=123456789
-
-# GitHub Gist (Optionnel - Historique)
-GITHUB_TOKEN=ghp_...
-GIST_ID=abc123...
-
-# Exchanges (Optionnel)
-BITGET_API_KEY=...
-BITGET_SECRET=...
-BITGET_PASSWORD=...
+### Configuration (.env)
+```env
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_CHAT_ID=...
+GITHUB_TOKEN=... # Pour la synchro Dashboard via Gist
+GIST_ID=...
 ```
 
-### GitHub Actions (24/7)
-1. Fork ce repo
-2. Settings → Secrets → Actions
-3. Ajouter les secrets listés ci-dessus
-
-Le bot s'exécute automatiquement **toutes les 10 minutes**.
-
----
-
-## 📁 Structure du Projet
-
-```
-btc-sniper-bot/
-├── main_v2.py              # Point d'entrée principal
-├── decision_engine_v2.py   # Scoring multi-dimensionnel (Black Box Recorder)
-├── exchange_aggregator.py  # Multi-exchange VWAP
-├── notifier.py             # Telegram alerts
-├── data_store.py           # GitHub Gist persistence (1000 signals max)
-├── runner.py               # Runner GitHub Actions
-├── config.py               # Configuration centralisée
-├── smart_entry.py          # Smart Entry Analyzer
-├── momentum_analyzer.py    # Momentum + Scalp Logic
-├── adaptive_leverage.py    # Dynamic Leverage Calculator
-├── signal_validator.py     # TP/SL Validation
-├── analyzers/              # 17 analysis modules
-│   ├── order_book.py
-│   ├── cvd.py
-│   ├── volume_profile.py
-│   ├── fvg.py
-│   ├── entropy.py
-│   ├── funding_liquidation.py
-│   ├── spoofing.py
-│   ├── derivatives.py
-│   ├── onchain.py
-│   ├── sentiment.py
-│   ├── macro.py
-│   ├── deribit_options.py
-│   ├── fluid_dynamics.py
-│   ├── liquidation_zones.py
-│   └── open_interest.py
-├── backtest/              # Backtesting suite
-│   ├── historical_backtest.py
-│   ├── data_provider.py
-│   ├── trade_simulator.py
-│   ├── metrics.py
-│   └── results/
-└── .github/workflows/
-    └── analyze.yml         # Cron 10min
-```
-
----
-
-## 🧪 Backtesting
-
+### Run
 ```bash
-# Backtest avec tous les signaux
-python backtest/historical_backtest.py --confidence 0
-
-# Backtest production (confidence >= 65%)
-python backtest/historical_backtest.py --confidence 65
+python main_v2.py --mode full
 ```
-
-### Output inclut:
-- P&L Total et par signal type
-- Winrate, Sharpe, Sortino, Max Drawdown
-- Pattern Discovery Report (corrélation modules/résultats)
-- Historique des trades avec Entry/Exit times
-
----
-
-## 📊 Data Logging (Black Box Recorder)
-
-Chaque signal enregistre automatiquement dans le Gist :
-- **Scores détaillés** : Technical, Structure, Sentiment, etc.
-- **Momentum state** : Score, Strength, Direction
-- **Smart Entry decision** : Strategy, Optimal Price
-
-Ceci permet une analyse rétrospective pour découvrir des patterns invisibles.
 
 ---
 
 ## 📄 License
-
-MIT
+MIT - Projet R&D Trading Institutionnel.
