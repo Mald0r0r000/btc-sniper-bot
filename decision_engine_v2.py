@@ -218,9 +218,12 @@ class DecisionEngineV2:
         # Hyperliquid whale data
         hyperliquid_data: Dict = None,
         # MACD 3D (HTF trend confirmation)
-        macd_data: Dict = None
+        macd_data: Dict = None,
+        # NEW R&D Metrics
+        squeeze_data: Dict = None
     ):
         self.price = current_price
+        self.squeeze = squeeze_data or {}
         self.trading_style = trading_style
         self.consistency_bonus = consistency_bonus
         # Store full consistency data for quality filters
@@ -736,6 +739,25 @@ class DecisionEngineV2:
                 score -= 10  # Confirmed bearish momentum
             elif adx_direction == 'BULLISH':  # DI+ > DI-
                 score += 10  # Confirmed bullish momentum
+            
+        # ========== R&D: ABSORPTION PENALTY ==========
+        # If CVD shows strong aggression but absorption is detected, the trend is likely stalled
+        if self.cvd.get('absorption_risk'):
+            deviation = score - 50
+            if abs(deviation) > 10:
+                # Reduce the score by 30% towards neutral - "Trust but verify"
+                score = 50 + (deviation * 0.7)
+            # Add a flat penalty if agression is very high
+            score -= (5 if deviation > 0 else -5)
+            
+        # ========== R&D: QUANTUM SQUEEZE BOOST ==========
+        # Compression + High OI = High probability of edge expansion
+        if self.squeeze.get('is_squeeze'):
+            squeeze_score = self.squeeze.get('squeeze_score', 0)
+            # Boost the impact of other technical signals by up to 25%
+            boost_factor = 1.0 + min(squeeze_score / 20, 0.25)
+            deviation = score - 50
+            score = 50 + (deviation * boost_factor)
             
         return max(0, min(100, score))
     
