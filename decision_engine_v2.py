@@ -1334,10 +1334,14 @@ class DecisionEngineV2:
         poc = self.vp.get('poc', 0)
         vah = self.vp.get('vah', 0)
         val = self.vp.get('val', 0)
+        amt_target = self.vp.get('target_price', 0)
         
         if direction == SignalDirection.LONG:
             if 'tp1' not in targets:
-                if vah > current_price:
+                # Priorité au target AMT (HVN suivant)
+                if amt_target > current_price:
+                    targets['tp1'] = amt_target
+                elif vah > current_price:
                     targets['tp1'] = vah
                 elif poc > current_price:
                     targets['tp1'] = poc
@@ -1349,7 +1353,10 @@ class DecisionEngineV2:
                     
         elif direction == SignalDirection.SHORT:
             if 'tp1' not in targets:
-                if val > 0 and val < current_price:
+                # Priorité au target AMT (HVN suivant)
+                if amt_target > 0 and amt_target < current_price:
+                    targets['tp1'] = amt_target
+                elif val > 0 and val < current_price:
                     targets['tp1'] = val
                 elif poc > 0 and poc < current_price:
                     targets['tp1'] = poc
