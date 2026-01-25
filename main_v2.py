@@ -559,12 +559,7 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
                 'iv_analysis': options_result.get('iv_analysis'),
                 'score': options_result.get('score')
             } if options_result else None,
-            'options': {
-                'max_pain': options_result.get('max_pain'),
-                'put_call_ratio': options_result.get('put_call_ratio'),
-                'iv_analysis': options_result.get('iv_analysis'),
-                'score': options_result.get('score')
-            } if options_result else None,
+            'squeeze': squeeze_result,
             'open_interest': oi_analysis_result if mode == 'full' else oi_data, # Use full analysis result in full mode
             'adx': adx_result,  # ADX market regime data
             'macd': macd_result,  # MACD MTF data
