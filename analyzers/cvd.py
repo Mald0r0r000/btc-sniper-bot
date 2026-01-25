@@ -190,60 +190,92 @@ class CVDAnalyzer:
         
     def _calculate_candle_cvd(self, candles: List[Dict], lookback: int) -> Dict[str, Any]:
         """ 
-        Estimates CVD from candle data using Weighted Volume Proxy (PineScript Logic)
+        Estimates CVD from candle data using Weighted Volume Proxy + Heikin Ashi Smoothing
         Formula: Delta = Volume * ((Close - Open) / (High - Low))
+        Smoothing: Standard Heikin Ashi on the Cumulative Delta series
         """
-        if not candles or len(candles) < lookback:
+        if not candles:
             return self._empty_tf_result()
             
-        relevant_candles = candles[-lookback:]
-        
-        buy_vol_proxy = 0.0
-        sell_vol_proxy = 0.0
-        net_cvd_accum = 0.0
-        
-        for candle in relevant_candles:
+        # 1. Calculate weighted delta for ALL available candles to build proper cumulative history
+        deltas = []
+        for candle in candles:
             close = float(candle.get('close', 0))
-            open_price = float(candle.get('open', 0))
+            open_p = float(candle.get('open', 0))
             high = float(candle.get('high', 0))
             low = float(candle.get('low', 0))
             vol = float(candle.get('volume', 0))
             
-            # Weighted Volume Delta (Body Strength)
             range_len = high - low
-            if range_len > 0:
-                body_strength = (close - open_price) / range_len
-            else:
-                body_strength = 0.0 # Doji/Flat
+            body_strength = (close - open_p) / range_len if range_len > 0 else 0.0
+            deltas.append(vol * body_strength)
             
-            # Delta for this candle
-            delta = vol * body_strength
-            net_cvd_accum += delta
+        # 2. Build Cumulative Delta series
+        cum_deltas = []
+        current_cum = 0.0
+        for d in deltas:
+            current_cum += d
+            cum_deltas.append(current_cum)
             
-            # Split vol based on strength
-            # If strength is +0.5, then 75% buy, 25% sell approximation?
-            # Or simpler: accumulation logic
-            if delta > 0:
-                buy_vol_proxy += abs(delta)
-            else:
-                sell_vol_proxy += abs(delta)
-                
-        # Recalculate Aggression Ratio based on the weighted volumes
-        # Note: sell_vol_proxy is sum of absolute negative deltas
-        agg_ratio = buy_vol_proxy / sell_vol_proxy if sell_vol_proxy > 0 else 10.0
+        if len(cum_deltas) < 2:
+            return self._empty_tf_result()
+
+        # 3. Apply Heikin Ashi Smoothing on the Cumulative Delta series
+        # Note: In PineScript logic provided, CVD Candles are derived from cumdelta
+        # o = cumdelta[1], c = cumdelta, h = max(o,c), l = min(o,c)
+        ha_open_series = []
+        ha_close_series = []
         
+        last_ha_open = (cum_deltas[0] + cum_deltas[1]) / 2 # Initial HA Open
+        
+        for i in range(1, len(cum_deltas)):
+            o = cum_deltas[i-1]
+            c = cum_deltas[i]
+            h = max(o, c)
+            l = min(o, c)
+            
+            haclose = (o + h + l + c) / 4
+            haopen = (last_ha_open + (ha_close_series[-1] if ha_close_series else haclose)) / 2
+            
+            ha_open_series.append(haopen)
+            ha_close_series.append(haclose)
+            last_ha_open = haopen
+            
+        # 4. Extract lookback results (latest values)
+        latest_ha_close = ha_close_series[-1]
+        latest_ha_open = ha_open_series[-1]
+        
+        # Calculate Net CVD for the lookback window (Raw cumdelta difference)
+        # For 1h (lookback 1), it's just the delta of the last candle.
+        # For 4h (lookback 4), it's the sum of the last 4 deltas.
+        window_deltas = deltas[-lookback:]
+        net_cvd_accum = sum(window_deltas)
+        
+        # Aggression Ratio using HA bodies (Smoothed Signal)
+        # We use the relationship between HA Close and HA Open to drive the trend score
+        # Since it's a cumulative series, we look at the 'slope' or delta of the HA bodies
+        # If HA is Green (HAClose > HAOpen), it's bullish.
+        
+        # Metric for trend: HA Body Ratio relative to total cumulative level
+        # To match aggression ratio logic, we approximate it:
+        if latest_ha_close > latest_ha_open:
+            agg_ratio = 1.5 # Arbitrary "Strong Bull" if Ha Green
+        elif latest_ha_close < latest_ha_open:
+            agg_ratio = 0.5 # Arbitrary "Strong Bear" if Ha Red
+        else:
+            agg_ratio = 1.0
+
         trend, score = self._calculate_trend_score(agg_ratio)
         
         return {
             'net_cvd': round(net_cvd_accum, 4),
-            'buy_volume': round(buy_vol_proxy, 4),
-            'sell_volume': round(sell_vol_proxy, 4),
+            'buy_volume': round(sum(d for d in window_deltas if d > 0), 4),
+            'sell_volume': round(abs(sum(d for d in window_deltas if d < 0)), 4),
             'aggression_ratio': round(agg_ratio, 2),
             'trend': trend,
             'score': round(score, 1),
-            'trade_count': len(relevant_candles), # Count of candles
             'available': True,
-            'method': 'CANDLE_WEIGHTED'
+            'method': 'CANDLE_HA_SMOOTHED'
         }
 
     def _calculate_trend_score(self, ratio: float):
