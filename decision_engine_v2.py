@@ -642,56 +642,32 @@ class DecisionEngineV2:
         elif confluence == 'ALL_BEARISH':
             score -= 5
         
-        # Volume Profile: Price Position = True Market Context
-        vp_shape = self.vp.get('shape', 'D-Shape')
-        poc = self.vp.get('poc', 0)
-        vah = self.vp.get('vah', 0)
-        val = self.vp.get('val', 0)
+        # Volume Profile: Structural Context (R&D Point 3)
+        vp_context = self.vp.get('context', 'NEUTRAL')
         
-        if vah > 0 and val > 0 and poc > 0:
-            va_height = vah - val
-            buffer = va_height * 0.1  # 10% buffer zone
+        # Scoring based on structural position
+        if vp_context == 'BREAKOUT_HIGH':
+            score += 15 # Bullish trend continuation
+        elif vp_context == 'BREAKDOWN_LOW':
+            score -= 15 # Bearish trend continuation
+        elif vp_context == 'TRAVERSING_GAP':
+            # Price in a Low Volume Node (LVN) - fast traversal expected
+            # We align with previous trend or momentum
+            score += (5 if score > 50 else -5)
+        elif vp_context == 'VA_ROTATION_UP':
+            score += 10 # Rotating from POC to VAH
+        elif vp_context == 'VA_ROTATION_DOWN':
+            score -= 10 # Rotating from POC to VAL
+        elif vp_context == 'POC_STUCK':
+            # Mean reversion risk or chop - pull towards neutral
+            score = 50 + (score - 50) * 0.5
             
-            if vp_shape == 'b-Shape':
-                # b-Shape: Volume concentrated at lows
-                if self.price < (val + buffer):
-                    # Breakdown: Price breaking below VAL = Bearish continuation
-                    score -= 15
-                elif self.price > poc:
-                    # Reversal: Price back above POC = Bullish reversal
-                    score += 5
-                else:
-                    # Consolidation: Stuck in structure
-                    score -= 10
-                    
-            elif vp_shape == 'P-Shape':
-                # P-Shape: Volume concentrated at highs
-                if self.price > (vah - buffer):
-                    # Breakout: Price pushing above VAH = Bullish continuation
-                    score += 15
-                elif self.price < poc:
-                    # Distribution: Price dropped below POC = Bearish reversal
-                    score -= 5
-                else:
-                    # Consolidation: Holding gains
-                    score += 10
-            # D-Shape: Range or Pre-Breakout
-            elif vp_shape == 'D-Shape':
-                # R&D: Volume Skew Pressure (Breakout Anticipation)
-                skew = self.vp.get('skew', 0)
-                
-                # Check for pressure buildup
-                if skew > 0.15:
-                    # Volume accumulating at highs -> Bullish pressure
-                    pressure_bonus = min(20, skew * 50) # +7.5 to +20
-                    score += pressure_bonus
-                elif skew < -0.15:
-                    # Volume accumulating at lows -> Bearish pressure
-                    pressure_penalty = min(20, abs(skew) * 50) # -7.5 to -20
-                    score -= pressure_penalty
-                else:
-                    # True neutral D-Shape
-                    pass
+        # Varies slightly based on POC proximity
+        poc = self.vp.get('poc', 0)
+        if poc > 0:
+            dist_to_poc = abs(self.price - poc) / poc
+            if dist_to_poc < 0.001: # Ultra near POC
+                score = 50 + (score - 50) * 0.8 # De-prioritize signal in high liquidity zone
             
         # KDJ Momentum (Oscillator)
         # Updated Logic (User Correction + Statistical Analysis):
@@ -1457,7 +1433,7 @@ class DecisionEngineV2:
             'sentiment_bias': 'BULLISH' if scores.get('sentiment', 50) > 55 else 'BEARISH' if scores.get('sentiment', 50) < 45 else 'NEUTRAL',
             'macro_bias': 'BULLISH' if scores.get('macro', 50) > 55 else 'BEARISH' if scores.get('macro', 50) < 45 else 'NEUTRAL',
             'manipulation_risk': self.spoofing.get('risk_level', 'UNKNOWN'),
-            'vp_shape': self.vp.get('shape', 'D-Shape'),
+            'vp_context': self.vp.get('context', 'NEUTRAL'),
             'quantum_state': self.entropy.get('quantum_state', 'UNKNOWN'),
             'fear_greed': self.sentiment.get('fear_greed', {}).get('value', 50)
         }

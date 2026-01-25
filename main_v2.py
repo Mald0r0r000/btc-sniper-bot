@@ -139,8 +139,8 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     
     # Volume Profile Analysis
     vp_analyzer = VolumeProfileAnalyzer(df_micro)
-    vp_result = vp_analyzer.analyze()
-    print(f"   📊 Volume Profile: {vp_result['shape']}")
+    vp_result = vp_analyzer.analyze(current_price)
+    print(f"   📊 Volume Profile: {vp_result['context']} ({len(vp_result.get('lvns', []))} gaps)")
     print(f"      POC: ${vp_result['poc']:,.2f} | VAH: ${vp_result['vah']:,.2f} | VAL: ${vp_result['val']:,.2f}")
     
     # FVG Analysis (MTF)

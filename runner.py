@@ -138,7 +138,7 @@ def run_scheduled_analysis() -> Dict[str, Any]:
             "tgt": signal.get("targets", {}),  # targets
             "ctx": {  # market_context compact
                 "qs": market_ctx.get("quantum_state"),
-                "vp": market_ctx.get("vp_shape"),
+                "vpc": market_ctx.get("vp_context"),
                 "mr": market_ctx.get("manipulation_risk"),
                 "fg": market_ctx.get("fear_greed"),
                 "tb": market_ctx.get("technical_bias"),
@@ -206,14 +206,12 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 "poc": vp_data.get("poc"),
                 "vah": vp_data.get("vah"),
                 "val": vp_data.get("val"),
-                "sh": vp_data.get("shape"),  # shape
-                "sk": vp_data.get("skew"),   # skew (new for D-Shape pressure)
-                # Price context for contextual VP analysis
+                "ctx": vp_data.get("context"), # Context (VA_ROTATION, etc)
+                "gaps": vp_data.get("lvns", []), # Low Volume Nodes
+                # Price context
                 "pctx": "ABOVE_VAH" if report.get("price", 0) > vp_data.get("vah", 0) and vp_data.get("vah", 0) > 0
-                       else "BELOW_VAL" if report.get("price", 0) < vp_data.get("val", float('inf')) and vp_data.get("val", 0) > 0
-                       else "ABOVE_POC" if report.get("price", 0) > vp_data.get("poc", 0) and vp_data.get("poc", 0) > 0
-                       else "BELOW_POC" if vp_data.get("poc", 0) > 0
-                       else None
+                        else "BELOW_VAL" if report.get("price", 0) < vp_data.get("val", 0) and vp_data.get("val", 0) > 0
+                        else "INSIDE_VA"
             },
             "fr": indicators.get("multi_exchange", {}).get("funding_divergence"),  # funding rate divergence
             "oi": {  # open_interest
