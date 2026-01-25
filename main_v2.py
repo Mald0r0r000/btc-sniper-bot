@@ -121,6 +121,13 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     cvd_analyzer = CVDAnalyzer(trades)
     cvd_result = cvd_analyzer.analyze_mtf() # Use new MTF analysis
     print(f"   📊 CVD (MTF): {cvd_result['emoji']} {cvd_result['trend']} (Score: {cvd_result['composite_score']}) | Confluence: {cvd_result['confluence']}")
+    if cvd_result.get('mtf_data'):
+        print("      Timeframe | Net CVD | Vol Buy | Vol Sell | Ratio | Trend")
+        print("      " + "-" * 60)
+        for tf in ['5m', '1h', '4h']:
+            data = cvd_result['mtf_data'].get(tf)
+            if data:
+                print(f"      {tf:<9} | {data['net_cvd']:>7.2f} | {data['buy_volume']:>7.1f} | {data['sell_volume']:>8.1f} | {data['aggression_ratio']:>5.2f} | {data['trend']}")
     
     # Volume Profile Analysis
     vp_analyzer = VolumeProfileAnalyzer(df_micro)
