@@ -128,11 +128,6 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     print(f"   📊 CVD (MTF): {cvd_result['emoji']} {cvd_result['trend']} (Score: {cvd_result['composite_score']}) | Confluence: {cvd_result['confluence']}")
     if cvd_result.get('absorption_risk'):
         print("      ⚠️ ABSORPTION DETECTED: Passive liquidity is blocking aggression.")
-        
-    # Quantum Squeeze Analysis (R&D Point 2)
-    squeeze_analyzer = SqueezeAnalyzer(candles_1h, oi_d1h)
-    squeeze_result = squeeze_analyzer.analyze()
-    print(f"   🍋 Squeeze: {squeeze_result['emoji']} {squeeze_result['status']} (Intensity: {squeeze_result['intensity']}) | Score: {squeeze_result['squeeze_score']}")
 
     if cvd_result.get('mtf_data'):
         print("      Timeframe | Net CVD | Vol Buy | Vol Sell | Ratio | Trend")
@@ -246,6 +241,7 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     self_trading_result = {}
     hyperliquid_result = {}
     macd_result = {}  # MACD 3D (initialized before mode check)
+    squeeze_result = {} # Initialize for DecisionEngine
     
     # MACD 3D Analysis (always run - needed for scoring)
     try:
@@ -312,6 +308,11 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
             if delta.get('available'):
                 delta_1h = delta.get('1h', {}).get('delta_oi_pct', 0)
                 print(f"   📊 Open Interest: {sig.get('emoji', '⚪')} {oi_analysis_result.get('total_oi_btc', 0):,.0f} BTC | Δ1h: {delta_1h:+.2f}%")
+                
+                # Quantum Squeeze Analysis (R&D Point 2) - Moved here to have delta_1h
+                squeeze_analyzer = SqueezeAnalyzer(candles_1h, delta_1h)
+                squeeze_result = squeeze_analyzer.analyze()
+                print(f"   🍋 Squeeze: {squeeze_result['emoji']} {squeeze_result['status']} (Intensity: {squeeze_result['intensity']}) | Score: {squeeze_result['squeeze_score']}")
             else:
                 print(f"   📊 Open Interest: {oi_analysis_result.get('total_oi_btc', 0):,.0f} BTC (tracking)")
         except Exception as e:
