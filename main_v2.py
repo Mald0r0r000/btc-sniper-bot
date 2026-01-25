@@ -117,10 +117,10 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     ob_result = ob_analyzer.analyze()
     print(f"   📒 Order Book: {ob_result['pressure']} ({ob_result['bid_ratio_pct']}% bids)")
     
-    # CVD Analysis
+    # CVD Analysis (MTF)
     cvd_analyzer = CVDAnalyzer(trades)
-    cvd_result = cvd_analyzer.analyze()
-    print(f"   📊 CVD: {cvd_result['emoji']} {cvd_result['status']} (Ratio: {cvd_result['aggression_ratio']})")
+    cvd_result = cvd_analyzer.analyze_mtf() # Use new MTF analysis
+    print(f"   📊 CVD (MTF): {cvd_result['emoji']} {cvd_result['trend']} (Score: {cvd_result['composite_score']}) | Confluence: {cvd_result['confluence']}")
     
     # Volume Profile Analysis
     vp_analyzer = VolumeProfileAnalyzer(df_micro)

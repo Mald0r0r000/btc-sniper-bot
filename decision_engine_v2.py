@@ -622,16 +622,22 @@ class DecisionEngineV2:
             score -= (50 - bid_ratio) * 0.2  # Reduced
         
         # CVD (Weight: HIGH - Predictive)
-        # Increased impact from 15 to 25
-        agg_ratio = self.cvd.get('aggression_ratio', 1.0)
-        if agg_ratio > 1.2:
-            score += 25
-        elif agg_ratio < 0.8:
-            score -= 25
-        elif agg_ratio > 1.1:
-            score += 10
-        elif agg_ratio < 0.9:
-            score -= 10
+        # MTF Composite Score Strategy
+        # score > 60 = Bullish
+        # score < 40 = Bearish
+        cvd_mtf_score = self.cvd.get('composite_score', 50)
+        
+        # Apply score deviation from 50 directly
+        # Max impact: ±25 points
+        cvd_deviation = cvd_mtf_score - 50
+        score += (cvd_deviation * 0.5) 
+        
+        # Bonus for Confluence (All aligned)
+        confluence = self.cvd.get('confluence', 'MIXED')
+        if confluence == 'ALL_BULLISH':
+            score += 5
+        elif confluence == 'ALL_BEARISH':
+            score -= 5
         
         # Volume Profile: Price Position = True Market Context
         vp_shape = self.vp.get('shape', 'D-Shape')
