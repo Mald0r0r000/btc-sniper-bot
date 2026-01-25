@@ -13,6 +13,7 @@ from exchange_aggregator import MultiExchangeAggregator
 from analyzers import (
     OrderBookAnalyzer,
     CVDAnalyzer,
+    SqueezeAnalyzer,
     VolumeProfileAnalyzer,
     FundingLiquidationAnalyzer,
     FVGAnalyzer,
@@ -450,7 +451,8 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         venturi_data=venturi_result,  # Fluid dynamics - Venturi
         self_trading_data=self_trading_result,  # Fluid dynamics - Self-Trading
         hyperliquid_data=hyperliquid_result,  # Whale tracking sentiment
-        macd_data=macd_result  # MACD 3D for HTF trend confirmation
+        macd_data=macd_result,  # MACD 3D for HTF trend confirmation
+        squeeze_data=squeeze_result  # NEW R&D Squeeze metric
     )
     
     decision_result = engine.generate_composite_signal()
