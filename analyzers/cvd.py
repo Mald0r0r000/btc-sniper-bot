@@ -80,8 +80,8 @@ class CVDAnalyzer:
     def analyze_mtf(self, ohlcv_data: Dict[str, List[Dict]] = None) -> Dict[str, Any]:
         """
         Multi-Timeframe CVD Analysis (Hybrid Approach)
-        - 5m: Uses Tick Data (High Precision)
-        - 1h/4h/1d: Uses Candle Data (Volume Delta Proxy)
+        - 5m: Uses Tick Data (High Precision) + Efficiency
+        - 1h/4h/1d: Uses Candle Data (Volume Delta Proxy) + Efficiency
         
         Args:
             ohlcv_data: Dict containing '1h' and '1d' candle data
@@ -92,7 +92,8 @@ class CVDAnalyzer:
         # 1. 5m Analysis (Tick-based)
         # ---------------------------------------------
         cutoff_5m = (now - timedelta(minutes=5)).timestamp() * 1000
-        trades_5m = [t for t in self.trades if t.get('timestamp', 0) >= cutoff_5m]
+        # Ensure trades are sorted by timestamp
+        trades_5m = sorted([t for t in self.trades if t.get('timestamp', 0) >= cutoff_5m], key=lambda x: x.get('timestamp', 0))
         
         if trades_5m:
             buy_vol = sum(float(t.get('amount', 0)) for t in trades_5m if t.get('side') == 'buy')
@@ -100,6 +101,23 @@ class CVDAnalyzer:
             net_cvd = buy_vol - sell_vol
             agg_ratio = buy_vol / sell_vol if sell_vol > 0 else 10.0
             
+            # CVD Efficiency (R&D Point 1): Abs(Price Change) / Abs(Net CVD)
+            start_price = float(trades_5m[0].get('price', 0))
+            end_price = float(trades_5m[-1].get('price', 0))
+            price_delta = end_price - start_price
+            
+            # Normalize efficiency: (Price % Change) / (Net CVD / 1000 BTC)
+            if abs(net_cvd) > 0.1 and end_price > 0:
+                efficiency = (abs(price_delta) / end_price) / (abs(net_cvd) / 1000.0) 
+            else:
+                efficiency = 1.0
+                
+            # Absorption Detection: High volume but price isn't moving
+            # Threshold: > 20 BTC net delta with < 5% expected efficiency
+            is_absorption = False
+            if abs(net_cvd) > 20 and efficiency < 0.05:
+                is_absorption = True
+
             trend, score = self._calculate_trend_score(agg_ratio)
             
             mtf_data['5m'] = {
@@ -107,6 +125,8 @@ class CVDAnalyzer:
                 'buy_volume': round(buy_vol, 4),
                 'sell_volume': round(sell_vol, 4),
                 'aggression_ratio': round(agg_ratio, 2),
+                'efficiency': round(efficiency, 4),
+                'is_absorption': is_absorption,
                 'trend': trend,
                 'score': round(score, 1),
                 'trade_count': len(trades_5m),
@@ -118,15 +138,12 @@ class CVDAnalyzer:
 
         # 2. Higher Timeframes (Candle-based Proxy)
         # ---------------------------------------------
-        # 1h: Uses last 1h candle (or equivalent candles)
         if ohlcv_data and '1h' in ohlcv_data:
             mtf_data['1h'] = self._calculate_candle_cvd(ohlcv_data['1h'], lookback=1)
             
-        # 4h: Uses last 4 x 1h candles
         if ohlcv_data and '1h' in ohlcv_data:
             mtf_data['4h'] = self._calculate_candle_cvd(ohlcv_data['1h'], lookback=4)
             
-        # 1d: Uses last 1d candle
         if ohlcv_data and '1d' in ohlcv_data:
             mtf_data['1d'] = self._calculate_candle_cvd(ohlcv_data['1d'], lookback=1)
             
@@ -137,10 +154,7 @@ class CVDAnalyzer:
 
         # 3. Composite Score & Confluence
         # ---------------------------------------------
-        # Re-normalize weights if some TFs are missing
-        # Weights: 5m (30%), 1h (40%), 4h (20%), 1d (10%)
         weights = {'5m': 0.3, '1h': 0.4, '4h': 0.2, '1d': 0.1}
-        
         composite_score = 0
         total_weight = 0
         
@@ -154,7 +168,6 @@ class CVDAnalyzer:
         else:
             composite_score = 50
             
-        # Confluence
         trends = [mtf_data[tf]['trend'] for tf in ['5m', '1h', '4h', '1d'] if mtf_data[tf]['available']]
         confluence = self._calculate_confluence(trends)
         
@@ -169,25 +182,19 @@ class CVDAnalyzer:
             overall_trend = 'NEUTRAL'
             emoji = '⚪'
             
+        # Global Absorption Risk
+        absorption_risk = any(mtf_data[tf].get('is_absorption', False) for tf in mtf_data)
+            
         return {
             'mtf_data': mtf_data,
             'composite_score': round(composite_score, 1),
             'confluence': confluence,
             'trend': overall_trend,
             'emoji': emoji,
+            'absorption_risk': absorption_risk,
             'available': True
         }
 
-    def _calculate_candle_cvd(self, candles: List[Dict], lookback: int) -> Dict[str, Any]:
-        """ Estimates CVD from candle data (Volume Delta Proxy) """
-        if not candles or len(candles) < lookback:
-            return self._empty_tf_result()
-            
-        relevant_candles = candles[-lookback:]
-        
-        buy_vol_proxy = 0.0
-        sell_vol_proxy = 0.0
-        
     def _calculate_candle_cvd(self, candles: List[Dict], lookback: int) -> Dict[str, Any]:
         """ 
         Estimates CVD from candle data using Weighted Volume Proxy + Heikin Ashi Smoothing
@@ -221,47 +228,47 @@ class CVDAnalyzer:
             return self._empty_tf_result()
 
         # 3. Apply Heikin Ashi Smoothing on the Cumulative Delta series
-        # Note: In PineScript logic provided, CVD Candles are derived from cumdelta
-        # o = cumdelta[1], c = cumdelta, h = max(o,c), l = min(o,c)
         ha_open_series = []
         ha_close_series = []
-        
-        last_ha_open = (cum_deltas[0] + cum_deltas[1]) / 2 # Initial HA Open
+        last_ha_open = (cum_deltas[0] + cum_deltas[1]) / 2 
         
         for i in range(1, len(cum_deltas)):
             o = cum_deltas[i-1]
             c = cum_deltas[i]
             h = max(o, c)
             l = min(o, c)
-            
             haclose = (o + h + l + c) / 4
             haopen = (last_ha_open + (ha_close_series[-1] if ha_close_series else haclose)) / 2
-            
             ha_open_series.append(haopen)
             ha_close_series.append(haclose)
             last_ha_open = haopen
             
-        # 4. Extract lookback results (latest values)
+        # 4. Extract lookback results
         latest_ha_close = ha_close_series[-1]
         latest_ha_open = ha_open_series[-1]
-        
-        # Calculate Net CVD for the lookback window (Raw cumdelta difference)
-        # For 1h (lookback 1), it's just the delta of the last candle.
-        # For 4h (lookback 4), it's the sum of the last 4 deltas.
         window_deltas = deltas[-lookback:]
         net_cvd_accum = sum(window_deltas)
         
-        # Aggression Ratio using HA bodies (Smoothed Signal)
-        # We use the relationship between HA Close and HA Open to drive the trend score
-        # Since it's a cumulative series, we look at the 'slope' or delta of the HA bodies
-        # If HA is Green (HAClose > HAOpen), it's bullish.
+        # 5. Efficiency Calculation (Candle)
+        start_candle = candles[-lookback]
+        end_candle = candles[-1]
+        price_delta = float(end_candle.get('close', 0)) - float(start_candle.get('open', 0))
+        end_price = float(end_candle.get('close', 1))
         
-        # Metric for trend: HA Body Ratio relative to total cumulative level
-        # To match aggression ratio logic, we approximate it:
+        if abs(net_cvd_accum) > 0.1 and end_price > 0:
+            efficiency = (abs(price_delta) / end_price) / (abs(net_cvd_accum) / 1000.0)
+        else:
+            efficiency = 1.0
+            
+        is_absorption = False
+        # Stricter thresholds for higher timeframes as proxy deltas are smoother
+        if abs(net_cvd_accum) > 100 and efficiency < 0.02: 
+            is_absorption = True
+
         if latest_ha_close > latest_ha_open:
-            agg_ratio = 1.5 # Arbitrary "Strong Bull" if Ha Green
+            agg_ratio = 1.5 
         elif latest_ha_close < latest_ha_open:
-            agg_ratio = 0.5 # Arbitrary "Strong Bear" if Ha Red
+            agg_ratio = 0.5 
         else:
             agg_ratio = 1.0
 
@@ -272,8 +279,11 @@ class CVDAnalyzer:
             'buy_volume': round(sum(d for d in window_deltas if d > 0), 4),
             'sell_volume': round(abs(sum(d for d in window_deltas if d < 0)), 4),
             'aggression_ratio': round(agg_ratio, 2),
+            'efficiency': round(efficiency, 4),
+            'is_absorption': is_absorption,
             'trend': trend,
             'score': round(score, 1),
+            'trade_count': len(window_deltas),
             'available': True,
             'method': 'CANDLE_HA_SMOOTHED'
         }

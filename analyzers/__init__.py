@@ -4,6 +4,7 @@ Version 2.0 - Institutional Grade
 """
 from .order_book import OrderBookAnalyzer
 from .cvd import CVDAnalyzer
+from .squeeze import SqueezeAnalyzer
 from .volume_profile import VolumeProfileAnalyzer
 from .funding_liquidation import FundingLiquidationAnalyzer
 from .fvg import FVGAnalyzer

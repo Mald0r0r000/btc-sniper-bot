@@ -125,6 +125,14 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         '1d': df_macro.to_dict('records') if df_macro is not None else []
     }) 
     print(f"   📊 CVD (MTF): {cvd_result['emoji']} {cvd_result['trend']} (Score: {cvd_result['composite_score']}) | Confluence: {cvd_result['confluence']}")
+    if cvd_result.get('absorption_risk'):
+        print("      ⚠️ ABSORPTION DETECTED: Passive liquidity is blocking aggression.")
+        
+    # Quantum Squeeze Analysis (R&D Point 2)
+    squeeze_analyzer = SqueezeAnalyzer(candles_1h, oi_d1h)
+    squeeze_result = squeeze_analyzer.analyze()
+    print(f"   🍋 Squeeze: {squeeze_result['emoji']} {squeeze_result['status']} (Intensity: {squeeze_result['intensity']}) | Score: {squeeze_result['squeeze_score']}")
+
     if cvd_result.get('mtf_data'):
         print("      Timeframe | Net CVD | Vol Buy | Vol Sell | Ratio | Trend")
         print("      " + "-" * 60)
