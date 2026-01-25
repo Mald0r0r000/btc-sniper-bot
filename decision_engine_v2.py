@@ -631,7 +631,9 @@ class DecisionEngineV2:
         elif agg_ratio > 1.1:
             score += 10
         elif agg_ratio < 0.9:
-            score -= 10Price Position = True Market Context
+            score -= 10
+        
+        # Volume Profile: Price Position = True Market Context
         vp_shape = self.vp.get('shape', 'D-Shape')
         poc = self.vp.get('poc', 0)
         vah = self.vp.get('vah', 0)
