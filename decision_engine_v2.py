@@ -905,7 +905,7 @@ class DecisionEngineV2:
         # 1. DXY DOMINANCE (80% de l'impact standard)
         # Corrélation Inverse: DXY Monte -> BTC Baisse
         dxy = self.cross_asset.get('dxy', {})
-        dxy_change = dxy.get('daily_change', 0)
+        dxy_change = dxy.get('change_24h', 0)
         
         # Formule: -20 points par 1% de variation DXY
         # Exemple: DXY +0.5% -> Score -10 (40)
