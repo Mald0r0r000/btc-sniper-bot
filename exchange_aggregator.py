@@ -39,18 +39,31 @@ class ExchangeConnection:
             
         self.exchange = getattr(ccxt, exchange_id)(exchange_config)
         
+        
         # Standardize symbol based on market type
         # Most exchanges: Spot = BTC/USDT, Perp = BTC/USDT:USDT (or similar)
         # We handle specific quirks here
-        if exchange_id == 'kraken' and market_type == 'spot':
-            self.symbol = 'BTC/USD'
-        elif exchange_id == 'coinbase' and market_type == 'spot':
-            self.symbol = 'BTC/USD'
-        elif exchange_id == 'hyperliquid':
-            self.symbol = 'BTC/USDC:USDC'
-        else:
-            # Default for major exchanges (Binance, Bybit, OKX, etc.)
-            self.symbol = 'BTC/USDT' if market_type == 'spot' else 'BTC/USDT:USDT'
+        self.symbol = 'BTC/USDT' # Default
+        
+        if market_type == 'spot':
+            if exchange_id in ['kraken', 'coinbase']:
+                self.symbol = 'BTC/USD'
+            else:
+                self.symbol = 'BTC/USDT'
+        elif market_type == 'swap':
+            if exchange_id == 'hyperliquid':
+                self.symbol = 'BTC/USDC:USDC' # Hyperliquid specific
+            elif exchange_id == 'kucoin':
+                 self.symbol = 'XBTUSDTM' # KuCoin Futures specific
+            elif exchange_id == 'bitmex':
+                 self.symbol = 'XBTUSD'
+            elif exchange_id == 'kraken':
+                 self.symbol = 'PF_XBTUSD' # Kraken Futures
+            elif exchange_id == 'dydx':
+                 self.symbol = 'BTC-USD'
+            else:
+                 # Standard for Bybit, Binance, OKX, Bitget, MEXC, Gate, Huobi
+                 self.symbol = 'BTC/USDT:USDT'
     
     def fetch_ohlcv(self, timeframe: str = '1h', limit: int = 100) -> Dict[str, Any]:
         """
