@@ -61,8 +61,16 @@ class ExchangeConnection:
                  self.symbol = 'PF_XBTUSD' # Kraken Futures
             elif exchange_id == 'dydx':
                  self.symbol = 'BTC-USD'
+            elif exchange_id == 'gateio':
+                 self.symbol = 'BTC_USDT' # Gate.io Futures
+            elif exchange_id == 'huobi':
+                 self.symbol = 'BTC-USDT' # Huobi Futures
+            elif exchange_id == 'mexc':
+                 self.symbol = 'BTC_USDT' # MEXC Futures (Contract) check
+            elif exchange_id == 'bitget':
+                 self.symbol = 'BTC/USDT:USDT' # Bitget Unified Symbol
             else:
-                 # Standard for Bybit, Binance, OKX, Bitget, MEXC, Gate, Huobi
+                 # Standard for Bybit, Binance, OKX
                  self.symbol = 'BTC/USDT:USDT'
     
     def fetch_ohlcv(self, timeframe: str = '1h', limit: int = 100) -> Dict[str, Any]:
