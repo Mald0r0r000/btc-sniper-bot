@@ -194,11 +194,11 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 "abs": cvd_data.get("absorption_risk"),
                 "ag": cvd_data.get("aggression_status"), # Aggression status (BULLISH_AGGRESSION, etc)
                 "sq": {
-                    "sc": indicators.get("squeeze", {}).get("squeeze_score"),
-                    "st": indicators.get("squeeze", {}).get("status"),
-                    "it": indicators.get("squeeze", {}).get("intensity"),
-                    "isq": indicators.get("squeeze", {}).get("is_squeeze"),
-                    "em": indicators.get("squeeze", {}).get("emoji")
+                    "sc": (indicators.get("squeeze") or {}).get("squeeze_score"),
+                    "st": (indicators.get("squeeze") or {}).get("status"),
+                    "it": (indicators.get("squeeze") or {}).get("intensity"),
+                    "isq": (indicators.get("squeeze") or {}).get("is_squeeze"),
+                    "em": (indicators.get("squeeze") or {}).get("emoji")
                 },
                 "tr": cvd_data.get("trend"),
                 "em": cvd_data.get("emoji")
@@ -216,16 +216,16 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                         else "BELOW_VAL" if report.get("price", 0) < vp_data.get("val", 0) and vp_data.get("val", 0) > 0
                         else "INSIDE_VA"
             },
-            "fr": indicators.get("multi_exchange", {}).get("funding_divergence"),  # funding rate divergence
+            "fr": (indicators.get("multi_exchange") or {}).get("funding_divergence"),  # funding rate divergence
             "oi": {  # open_interest
-                "t": indicators.get("open_interest", {}).get("total_oi_btc"),  # total (from analysis result)
-                "d1h": indicators.get("open_interest", {}).get("delta", {}).get("1h", {}).get("delta_oi_pct"),
-                "d24h": indicators.get("open_interest", {}).get("delta", {}).get("24h", {}).get("delta_oi_pct")
+                "t": (indicators.get("open_interest") or {}).get("total_oi_btc"),  # total (from analysis result)
+                "d1h": (indicators.get("open_interest") or {}).get("delta", {}).get("1h", {}).get("delta_oi_pct"),
+                "d24h": (indicators.get("open_interest") or {}).get("delta", {}).get("24h", {}).get("delta_oi_pct")
             },
             "macro": {  # cross-asset & macro
-                "fg": indicators.get("sentiment", {}).get("fear_greed", {}).get("value"),  # fear_greed index
-                "re": indicators.get("macro", {}).get("risk_environment", {}).get("environment"),  # risk env
-                "ex": indicators.get("multi_exchange", {}).get("exchanges_connected", 0),
+                "fg": (indicators.get("sentiment") or {}).get("fear_greed", {}).get("value"),  # fear_greed index
+                "re": (indicators.get("macro") or {}).get("risk_environment", {}).get("environment"),  # risk env
+                "ex": (indicators.get("multi_exchange") or {}).get("exchanges_connected", 0),
                 # New Cross-Asset Data
                 "dxy": cross_asset.get("dxy", {}).get("value"),
                 "spx": cross_asset.get("spx", {}).get("value"),
