@@ -157,13 +157,27 @@ class ExchangeConnection:
         except Exception as e:
             return {'exchange': self.exchange_id, 'error': str(e), 'success': False}
     
+    
     def fetch_open_interest(self) -> Dict[str, Any]:
-        """Récupère l'open interest"""
+        """Récupère l'open interest avec normalization BTC"""
         try:
             oi = self.exchange.fetch_open_interest(self.symbol)
+            raw_oi = float(oi.get('openInterestAmount', 0) or 0)
+            
+            # Normalization Heuristic
+            # If OI is > 100,000, it is likely in USD or Contracts (e.g. 1 Contract = 1 USD or 100 USD)
+            # Total BTC OI is rarely > 100k on a single exchange.
+            normalized_oi = raw_oi
+            if raw_oi > 100000:
+                ticker = self.exchange.fetch_ticker(self.symbol)
+                price = float(ticker.get('last') or 0)
+                if price > 0:
+                    normalized_oi = raw_oi / price
+
             return {
                 'exchange': self.exchange_id,
-                'open_interest': float(oi.get('openInterestAmount', 0) or 0),
+                'open_interest': normalized_oi,
+                'raw_open_interest': raw_oi, # Keep raw for debug
                 'success': True
             }
         except Exception as e:
