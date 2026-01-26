@@ -42,6 +42,8 @@ from .cross_asset import CrossAssetAnalyzer
 # Event Calendar
 from .event_calendar import EventCalendarAnalyzer
 
+from .spot_perp_divergence import SpotPerpDivergenceAnalyzer
+
 __all__ = [
     # Core analyzers
     'OrderBookAnalyzer',
@@ -86,6 +88,9 @@ __all__ = [
     'CrossAssetAnalyzer',
     
     # Event Calendar
-    'EventCalendarAnalyzer'
+    'EventCalendarAnalyzer',
+    
+    # Spot-Perp
+    'SpotPerpDivergenceAnalyzer'
 ]
 
