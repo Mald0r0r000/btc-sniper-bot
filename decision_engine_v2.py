@@ -508,9 +508,9 @@ class DecisionEngineV2:
             is_htf_bullish = htf_bias == 'BULLISH'
             
             if is_long_signal and not is_htf_bullish:
-                htf_penalty = 20  # Going long against bearish HTF
+                htf_penalty = 10  # Reduced from 20 to 10
             elif not is_long_signal and is_htf_bullish:
-                htf_penalty = 20  # Going short against bullish HTF
+                htf_penalty = 10  # Reduced from 20 to 10
                 
             adjusted_score -= htf_penalty
         
@@ -526,7 +526,7 @@ class DecisionEngineV2:
             if tech_score < 35:
                 bearish_dims += 1  # Bonus for strong technical bearish
             
-            if direction == SignalDirection.LONG and bullish_dims < 3:
+            if direction == SignalDirection.LONG and bullish_dims < 2: # Reduced from 3 to 2
                 signal_type = SignalType.NO_SIGNAL
                 direction = SignalDirection.NEUTRAL
             elif direction == SignalDirection.SHORT and bearish_dims < 2:  # Reduced from 3 to 2
@@ -564,10 +564,13 @@ class DecisionEngineV2:
                 is_venturi_bearish = (venturi_direction == 'DOWN' or 
                                      (breakout_prob > 50 and venturi_direction == 'DOWN'))
                 
+                
                 if not is_venturi_bearish:
-                    signal_type = SignalType.NO_SIGNAL
-                    direction = SignalDirection.NEUTRAL
-                    # Optional: Add a specific reason log or metric tracking here
+                    # Convert BLOCK to PENALTY
+                    # signal_type = SignalType.NO_SIGNAL
+                    # direction = SignalDirection.NEUTRAL
+                    adjusted_score -= 15
+                    warnings.append(f"⚠️ Contre-tendance Macro ({macro_score}/100) sans confirmation Venturi")
         if self.event.get('event_active') and signal_type not in [SignalType.NO_SIGNAL]:
             event_penalty = self.event.get('confidence_penalty', 30)
             adjusted_score -= event_penalty
@@ -1052,14 +1055,14 @@ class DecisionEngineV2:
             adx_val = self.adx.get('adx', 0)
             
             # FADE HIGH (Short VAH)
-            # Only if no bullish pressure (Skew < 0.15)
-            if near_vah and skew < 0.15:
-                if adx_val < 30: # Stronger confidence in range
+            # Relaxed: Removed Skew requirement, rely on ADX < 30
+            if near_vah:
+                if adx_val < 30: 
                     return SignalType.FADE_HIGH
             
             # FADE LOW (Long VAL)
-            # Only if no bearish pressure (Skew > -0.15)
-            if near_val and skew > -0.15:
+            # Relaxed: Removed Skew requirement
+            if near_val:
                 if adx_val < 30:
                     return SignalType.FADE_LOW
         
