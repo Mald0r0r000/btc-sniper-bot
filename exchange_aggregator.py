@@ -17,42 +17,85 @@ import config
 class ExchangeConnection:
     """Connexion à un exchange individuel"""
     
-    def __init__(self, exchange_id: str, api_key: str = '', secret: str = '', password: str = ''):
+    def __init__(self, exchange_id: str, api_key: str = '', secret: str = '', password: str = '', market_type: str = 'swap'):
         self.exchange_id = exchange_id
+        self.market_type = market_type
         
         exchange_config = {
             'enableRateLimit': True,
-            'options': {'defaultType': 'swap'},
-            'timeout': 15000  # 15s timeout par requête
+            'options': {'defaultType': market_type},
+            'timeout': 15000  # 15s timeout
         }
-        
+
         if api_key:
             exchange_config['apiKey'] = api_key
             exchange_config['secret'] = secret
             if password:
                 exchange_config['password'] = password
         
+        # Initialize exchange
+        if not hasattr(ccxt, exchange_id):
+            raise ValueError(f"Exchange {exchange_id} not supported by ccxt")
+            
         self.exchange = getattr(ccxt, exchange_id)(exchange_config)
         
-        # Mapping des symboles par exchange
-        self.symbol_map = {
-            'binance': 'BTC/USDT:USDT',
-            'okx': 'BTC/USDT:USDT',
-            'bybit': 'BTC/USDT:USDT',
-            'bitget': 'BTC/USDT:USDT',
-            # Exchanges US-friendly (fallback)
-            'mexc': 'BTC/USDT:USDT',
-            'phemex': 'BTC/USDT:USDT',
-            'bitmex': 'BTC/USDT:USDT',
-            # Exchanges US-friendly (Premium Fallback)
-            'kraken': 'BTC/USD',
-            'coinbase': 'BTC/USD',
-            'binanceus': 'BTC/USDT',
-            # DEX (pas de géoblocage)
-            'hyperliquid': 'BTC/USDC:USDC'
-        }
-        self.symbol = self.symbol_map.get(exchange_id, 'BTC/USDT:USDT')
+        # Standardize symbol based on market type
+        # Most exchanges: Spot = BTC/USDT, Perp = BTC/USDT:USDT (or similar)
+        # We handle specific quirks here
+        if exchange_id == 'kraken' and market_type == 'spot':
+            self.symbol = 'BTC/USD'
+        elif exchange_id == 'coinbase' and market_type == 'spot':
+            self.symbol = 'BTC/USD'
+        elif exchange_id == 'hyperliquid':
+            self.symbol = 'BTC/USDC:USDC'
+        else:
+            # Default for major exchanges (Binance, Bybit, OKX, etc.)
+            self.symbol = 'BTC/USDT' if market_type == 'spot' else 'BTC/USDT:USDT'
     
+    def fetch_ohlcv(self, timeframe: str = '1h', limit: int = 100) -> Dict[str, Any]:
+        """
+        Fetches OHLCV candles
+        Returns standardized data with volume in BTC
+        """
+        try:
+            # Determine limit based on timeframe to optimize data fetch
+            candles = self.exchange.fetch_ohlcv(self.symbol, timeframe, limit=limit)
+            
+            # Simple conversion: timestamp, open, high, low, close, volume
+            data = []
+            for candle in candles:
+                ts = candle[0]
+                o, h, l, c, v = map(float, candle[1:6])
+                
+                # Normalization: ensure volume is in BTC
+                # Heuristic: If volume is suspiciously large (> 100,000), it's likely in Quote Currency (USD/USDT) or Contracts
+                # because 100k BTC per hour on a single exchange is extremely rare.
+                if v > 100000: 
+                     # Assume it's USD/Contract volume, convert to BTC
+                     if c > 0:
+                        v = v / c
+                
+                data.append({
+                    'timestamp': ts,
+                    'open': o, 'high': h, 'low': l, 'close': c, 'volume': v,
+                    'datetime': datetime.fromtimestamp(ts/1000, timezone.utc).isoformat()
+                })
+                
+            return {
+                'exchange': self.exchange_id,
+                'market_type': self.market_type,
+                'timeframe': timeframe,
+                'data': data,
+                'success': True
+            }
+        except Exception as e:
+            return {
+                'exchange': self.exchange_id, 
+                'market_type': self.market_type,
+                'error': str(e), 
+                'success': False
+            }
+
     def fetch_order_book(self, limit: int = 50) -> Dict[str, Any]:
         """Récupère l'order book"""
         try:
@@ -177,70 +220,81 @@ class MultiExchangeAggregator:
                       Par défaut: 8 exchanges (majeurs + fallback US-friendly)
         """
         if exchanges is None:
-            # Inclure les exchanges US-friendly comme fallback
-            exchanges = [
-                'binance', 'okx', 'bybit', 'bitget',  # Tier 1-2 (peuvent être géobloqués)
-                'mexc', 'gateio', 'phemex', 'bitmex',  # Fallback US-friendly
-                'kraken', 'coinbase', 'binanceus', # US Friendly Premium
-                'hyperliquid'  # DEX - jamais géobloqué
+            # Full list based on user request (excluding blocked ones)
+            # Spot Exchanges
+            self.spot_list = [
+                'bybit', 'bitget', 'gateio', 'mexc', 
+                'kraken', 'coinbase', 'kucoin', 'huobi'
             ]
+            # Perp Exchanges
+            self.perp_list = [
+                'bybit', 'bitget', 'gateio', 'mexc', 'kraken',
+                'hyperliquid', 'huobi'
+            ]
+            # (Note: Binance/OKX excluded to avoid geoblocking issues)
+            
+            exchanges = list(set(self.spot_list + self.perp_list))
         
         self.requested_exchanges = exchanges
-        self.exchanges = {}
-        self.failed_exchanges = {}  # Track failed exchanges and reasons
-        self.dynamic_weights = {}   # Weights recalculated based on availability
+        self.exchanges = {} # Stores connection objects: "exchange_id:market_type" -> Connection
+        self.failed_exchanges = {}
+        self.dynamic_weights = {}
+
+        # Initialize Connections
+        # KEY format: "exchange_id:market_type" (e.g. "bybit:spot", "bybit:swap")
         
-        for ex_id in exchanges:
+        # 1. Initialize Spot Connections
+        for ex_id in self.spot_list:
+            key = f"{ex_id}:spot"
             try:
-                # Pour Bitget, on utilise les clés API si disponibles
+                self.exchanges[key] = ExchangeConnection(ex_id, market_type='spot')
+            except Exception as e:
+                self._handle_conn_error(key, e)
+
+        # 2. Initialize Perp Connections
+        for ex_id in self.perp_list:
+            key = f"{ex_id}:swap"
+            try:
+                # Use credentials for Bitget if available
                 if ex_id == 'bitget' and config.API_KEY:
-                    self.exchanges[ex_id] = ExchangeConnection(
-                        ex_id, 
-                        config.API_KEY, 
-                        config.API_SECRET, 
-                        config.API_PASSWORD
+                     self.exchanges[key] = ExchangeConnection(
+                        ex_id, config.API_KEY, config.API_SECRET, config.API_PASSWORD, market_type='swap'
                     )
                 else:
-                    self.exchanges[ex_id] = ExchangeConnection(ex_id)
+                    self.exchanges[key] = ExchangeConnection(ex_id, market_type='swap')
             except Exception as e:
-                error_msg = str(e).lower()
-                is_geoblock = any(geo in error_msg for geo in self.GEOBLOCK_ERRORS)
-                self.failed_exchanges[ex_id] = {
-                    'error': str(e),
-                    'is_geoblock': is_geoblock
-                }
-                if is_geoblock:
-                    print(f"   🌍 {ex_id.upper()} géobloqué (IP restriction)")
-                else:
-                    print(f"   ⚠️ Impossible de connecter {ex_id}: {e}")
-        
+                 self._handle_conn_error(key, e)
+
         # Calculer les poids dynamiques
         self._recalculate_weights()
     
-    def _recalculate_weights(self, available_exchanges: List[str] = None) -> Dict[str, float]:
-        """
-        Recalcule les poids basé sur les exchanges disponibles
-        Normalise à 100% pour les exchanges actifs
-        """
-        if available_exchanges is None:
-            available_exchanges = list(self.exchanges.keys())
-        
-        if not available_exchanges:
-            return {}
-        
-        # Filtrer les poids pour les exchanges disponibles
-        available_weights = {
-            k: v for k, v in self.BASE_WEIGHTS.items() 
-            if k in available_exchanges
+    def _handle_conn_error(self, key, e):
+        """Log connection errors"""
+        error_msg = str(e).lower()
+        is_geoblock = any(geo in error_msg for geo in self.GEOBLOCK_ERRORS)
+        self.failed_exchanges[key] = {
+            'error': str(e),
+            'is_geoblock': is_geoblock
         }
-        
-        # Normaliser à 100%
-        total = sum(available_weights.values())
-        if total > 0:
-            self.dynamic_weights = {k: v/total for k, v in available_weights.items()}
+        if is_geoblock:
+            print(f"   🌍 {key.upper()} géobloqué (IP restriction)")
         else:
-            # Fallback: poids égaux
-            self.dynamic_weights = {k: 1.0/len(available_exchanges) for k in available_exchanges}
+            print(f"   ⚠️ Impossible de connecter {key}: {e}")
+
+    def _recalculate_weights(self, available_keys: List[str] = None) -> Dict[str, float]:
+        """
+        Recalculates weights. For now, we just give equal weight 
+        to all available exchanges in a category.
+        """
+        if available_keys is None:
+            available_keys = list(self.exchanges.keys())
+            
+        if not available_keys:
+            return {}
+            
+        # Simplified Equal Weighting
+        count = len(available_keys)
+        self.dynamic_weights = {k: 1.0/count for k in available_keys}
         
         return self.dynamic_weights
     
@@ -271,6 +325,36 @@ class MultiExchangeAggregator:
                 except Exception as e:
                     results[ex_id] = {'exchange': ex_id, 'error': str(e), 'success': False}
         
+        return results
+    
+    def fetch_global_cvd_candles(self, timeframes: List[str] = ['1h']) -> Dict[str, Any]:
+        """
+        Fetches OHLCV data for all Spot and Perp exchanges for CVD analysis.
+        """
+        print(f"   📡 Fetching Global CVD Data ({len(self.exchanges)} sources)...")
+        results = {}
+        
+        with ThreadPoolExecutor(max_workers=20) as executor: # Higher workers for IO bound
+            futures = []
+            for key, connection in self.exchanges.items():
+                for tf in timeframes:
+                    futures.append(executor.submit(connection.fetch_ohlcv, timeframe=tf, limit=100))
+            
+            for future in as_completed(futures, timeout=30):
+                try:
+                    res = future.result()
+                    if res['success']:
+                        ex_id = res['exchange']
+                        m_type = res['market_type']
+                        tf = res['timeframe']
+                        
+                        if tf not in results: results[tf] = {}
+                        if m_type not in results[tf]: results[tf][m_type] = {}
+                        
+                        results[tf][m_type][ex_id] = res['data']
+                except Exception as e:
+                    pass
+                    
         return results
     
     def get_aggregated_data(self) -> Dict[str, Any]:

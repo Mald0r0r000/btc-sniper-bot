@@ -1,3 +1,4 @@
+```
 """
 BTC Sniper Bot V2 - Institutional Grade
 Point d'entrée principal avec tous les analyseurs avancés
@@ -28,7 +29,8 @@ from analyzers import (
     SelfTradingDetector,
     VenturiAnalyzer,
     HyperliquidAnalyzer,
-    MACDAnalyzer
+    MACDAnalyzer,
+    SpotPerpDivergenceAnalyzer # Added SpotPerpDivergenceAnalyzer
 )
 from decision_engine_v2 import DecisionEngineV2
 from consistency_checker import ConsistencyChecker
@@ -60,6 +62,7 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     connector = BitgetConnector()
     
     # Multi-exchange aggregator
+    multi_agg = None # Initialize multi_agg
     if mode == 'full':
         try:
             multi_agg = MultiExchangeAggregator()  # Uses default 9 exchanges with fallback
@@ -250,7 +253,8 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     hyperliquid_result = {}
     macd_result = {}  # MACD 3D (initialized before mode check)
     squeeze_result = {} # Initialize for DecisionEngine
-    
+    spot_perp_results = {} # Initialize for DecisionEngine
+
     # MACD 3D Analysis (always run - needed for scoring)
     try:
         macd_analyzer = MACDAnalyzer()
@@ -306,8 +310,7 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
             # Ajouter l'OI Hyperliquid s'il est disponible
             if hyperliquid_result and hyperliquid_result.get('success'):
                 hl_oi = hyperliquid_result.get('market', {}).get('open_interest_btc', 0)
-                if hl_oi > 0:
-                    target_open_interests['hyperliquid'] = hl_oi
+                target_open_interests['hyperliquid'] = hl_oi
             
             oi_analysis_result = oi_analyzer.analyze(current_price, target_open_interests)
             delta = oi_analysis_result.get('delta', {})
@@ -397,6 +400,26 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
 
         # Block moved
 
+        # 5. Multi-Exchange CVD (Spot vs Perp)
+        # ---------------------------------------------
+        try:
+            # Fetch Global CVD Data (1h, 4h)
+            print("   🌍 Fetching Spot vs Perp data...")
+            if multi_agg: # Ensure multi_agg is initialized
+                global_cvd_data = multi_agg.fetch_global_cvd_candles(timeframes=['1h', '4h'])
+                
+                spot_perp_analyzer = SpotPerpDivergenceAnalyzer()
+                spot_perp_results = spot_perp_analyzer.analyze(global_cvd_data)
+                
+                print(f"   📊 Spot/Perp Divergence (1h): {spot_perp_results.get('1h', {}).get('regime', 'N/A')}")
+            else:
+                print("   ⚠️ Multi-exchange aggregator not available for Spot/Perp analysis.")
+        except Exception as e:
+            print(f"   ❌ Spot/Perp Analysis Failed: {e}")
+            spot_perp_results = {}
+
+        # 6. Décision Finale
+        # ---------------------------------------------
         
         # Self-Trading Detection (Fluid Dynamics R&D)
         self_trading_result = {}
@@ -461,7 +484,8 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         self_trading_data=self_trading_result,  # Fluid dynamics - Self-Trading
         hyperliquid_data=hyperliquid_result,  # Whale tracking sentiment
         macd_data=macd_result,  # MACD 3D for HTF trend confirmation
-        squeeze_data=squeeze_result  # NEW R&D Squeeze metric
+        squeeze_data=squeeze_result,  # NEW R&D Squeeze metric
+        spot_perp_data=spot_perp_results # NEW Spot/Perp Divergence
     )
     
     decision_result = engine.generate_composite_signal()

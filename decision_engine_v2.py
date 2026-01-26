@@ -220,10 +220,12 @@ class DecisionEngineV2:
         # MACD 3D (HTF trend confirmation)
         macd_data: Dict = None,
         # NEW R&D Metrics
-        squeeze_data: Dict = None
+        squeeze_data: Dict = None,
+        spot_perp_data: Dict = None
     ):
         self.price = current_price
         self.squeeze = squeeze_data or {}
+        self.spot_perp = spot_perp_data or {}
         self.trading_style = trading_style
         self.consistency_bonus = consistency_bonus
         # Store full consistency data for quality filters
@@ -820,24 +822,44 @@ class DecisionEngineV2:
         """Score multi-exchange"""
         score = 50.0
         
+        # 1. Spot vs Perp Divergence (Priority)
+        # ---------------------------------------------
+        # Check 1H timeframe for intraday signal
+        sp_data = self.spot_perp.get('1h', {})
+        sp_signal = sp_data.get('signal', 'NEUTRAL')
+        
+        if sp_signal == 'BULLISH_QUALITY': # Spot Lead Rally
+            score += 15
+        elif sp_signal == 'BEARISH_DIVERGENCE': # Perp Lead Rally (Trap)
+            score -= 10
+        elif sp_signal == 'BEARISH_HEAVY': # Spot Selling into Perp Buying
+            score -= 15
+        elif sp_signal == 'BULLISH': # Broad Buying
+            score += 10
+        elif sp_signal == 'BEARISH': # Broad Selling
+            score -= 10
+            
         if not self.multi_ex:
             return score
         
-        # Funding divergence
+        # 2. Funding divergence
+        # ---------------------------------------------
         funding = self.multi_ex.get('funding_analysis', {})
         if funding.get('signal') == 'SHORTS_PAYING':
             score += 15  # Short squeeze potential
         elif funding.get('signal') == 'LONGS_EXPENSIVE':
             score -= 10
         
-        # Arbitrage opportunity
+        # 3. Arbitrage opportunity
+        # ---------------------------------------------
         arb = self.multi_ex.get('arbitrage', {})
         if arb.get('opportunity'):
             spread_pct = arb.get('spread_pct', 0)
             if spread_pct > 0.01:
                 score += 5  # Légèrement bullish si arb vers le haut
         
-        # Global order book imbalance
+        # 4. Global order book imbalance
+        # ---------------------------------------------
         global_ob = self.multi_ex.get('global_orderbook', {})
         imbalance = global_ob.get('imbalance_pct', 50)
         if imbalance > 55:
