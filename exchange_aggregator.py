@@ -389,6 +389,24 @@ class MultiExchangeAggregator:
                         results[tf][m_type][ex_id] = res['data']
                 except Exception as e:
                     pass
+        
+        # Logging details
+        print(f"\n   🧾 Data Fetch Details ({timeframes[0]}):")
+        print(f"   {'Exchange':<15} | {'Type':<6} | {'Candles':<8} | {'Vol (BTC)':<12} | {'Status'}")
+        print("   " + "-" * 60)
+        
+        for tf in timeframes:
+            if tf != timeframes[0]: continue # Log only first timeframe
+            
+            for m_type, exchanges in results.get(tf, {}).items():
+                for ex_id, candles in exchanges.items():
+                    if not candles: continue
+                    
+                    # Basic validation
+                    status = "✅ OK" if len(candles) >= 10 else "⚠️ LOW DATA"
+                    total_vol = sum(c['volume'] for c in candles)
+                    
+                    print(f"   {ex_id:<15} | {m_type:<6} | {len(candles):<8} | {total_vol:<12.1f} | {status}")
                     
         return results
     
