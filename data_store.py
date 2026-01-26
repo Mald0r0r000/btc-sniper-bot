@@ -290,6 +290,77 @@ class GistDataStore:
             return weights_data['performance']
         return None
 
+    # ========== OI HISTORY PERSISTENCE ==========
+    
+    OI_HISTORY_FILENAME = "oi_history.json"
+    
+    def save_oi_history(self, history_data: List[Dict[str, Any]]) -> bool:
+        """
+        Sauvegarde l'historique OI dans le Gist
+        """
+        if not self.github_token or not self.gist_id:
+            return False
+        
+        try:
+            # Compact JSON for efficiency
+            content = json.dumps(history_data, separators=(',', ':'))
+            
+            response = requests.patch(
+                f"{self.api_base}/gists/{self.gist_id}",
+                headers=self._headers(),
+                json={
+                    "files": {
+                        self.OI_HISTORY_FILENAME: {
+                            "content": content
+                        }
+                    }
+                },
+                timeout=15
+            )
+            
+            if response.ok:
+                print(f"   💾 Historique OI sauvegardé ({len(history_data)} points)")
+                return True
+            else:
+                print(f"⚠️ Erreur sauvegarde OI: {response.status_code}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Erreur sauvegarde OI: {e}")
+            return False
+
+    def load_oi_history(self) -> Optional[List[Dict[str, Any]]]:
+        """
+        Charge l'historique OI depuis le Gist
+        """
+        if not self.github_token or not self.gist_id:
+            return None
+        
+        try:
+            response = requests.get(
+                f"{self.api_base}/gists/{self.gist_id}",
+                headers=self._headers(),
+                timeout=15
+            )
+            
+            if response.ok:
+                gist_data = response.json()
+                files = gist_data.get("files", {})
+                
+                if self.OI_HISTORY_FILENAME in files:
+                    content = files[self.OI_HISTORY_FILENAME]["content"]
+                    history_data = json.loads(content)
+                    print(f"   📈 Historique OI chargé depuis Gist ({len(history_data)} points)")
+                    return history_data
+                else:
+                    return None
+            else:
+                return None
+                
+        except Exception as e:
+            print(f"⚠️ Erreur chargement OI: {e}")
+            return None
+
 
 def test_gist_store():
     """Test du stockage Gist"""

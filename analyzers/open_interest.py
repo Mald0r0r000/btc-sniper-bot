@@ -27,19 +27,36 @@ class OpenInterestAnalyzer:
     MAX_HISTORY = 96  # 24h si on analyse toutes les 15min
     
     def __init__(self):
+        try:
+            from data_store import GistDataStore
+            self.gist_store = GistDataStore()
+        except ImportError:
+            self.gist_store = None
+            
         self.history = self._load_history()
     
     def _load_history(self) -> deque:
         """Charge l'historique précédent"""
+        # 1. Try Gist first (Source of Truth for persistence)
+        if self.gist_store:
+            gist_data = self.gist_store.load_oi_history()
+            if gist_data:
+                # Validation du Gist data (même logique de reset)
+                if gist_data and gist_data[-1].get('total_oi', 0) > 1000000:
+                   print("⚠️ OI History (Gist) corrupted/unnormalized. Resetting.")
+                   return deque(maxlen=self.MAX_HISTORY)
+                   
+                return deque(gist_data, maxlen=self.MAX_HISTORY)
+
+        # 2. Fallback to local file
         try:
             if os.path.exists(self.HISTORY_FILE):
                 with open(self.HISTORY_FILE, 'r') as f:
                     data = json.load(f)
                 
                 # Validation: detected massive drop (normalization fix case)
-                # If the last entry has > 1M BTC OI, it's likely corrupted/raw data
                 if data and data[-1].get('total_oi', 0) > 1000000:
-                    print("⚠️ OI History corrupted/unnormalized (OI > 1M). Resetting history.")
+                    print("⚠️ OI History (Local) corrupted/unnormalized. Resetting history.")
                     return deque(maxlen=self.MAX_HISTORY)
                     
                 return deque(data, maxlen=self.MAX_HISTORY)
@@ -49,11 +66,18 @@ class OpenInterestAnalyzer:
     
     def _save_history(self):
         """Sauvegarde l'historique"""
+        history_list = list(self.history)
+        
+        # 1. Save locally
         try:
             with open(self.HISTORY_FILE, 'w') as f:
-                json.dump(list(self.history), f)
+                json.dump(history_list, f)
         except Exception:
             pass
+            
+        # 2. Save to Gist
+        if self.gist_store:
+            self.gist_store.save_oi_history(history_list)
     
     def analyze(self, current_price: float, 
                 open_interests: Dict[str, float],
