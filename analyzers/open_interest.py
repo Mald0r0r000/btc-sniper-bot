@@ -35,6 +35,13 @@ class OpenInterestAnalyzer:
             if os.path.exists(self.HISTORY_FILE):
                 with open(self.HISTORY_FILE, 'r') as f:
                     data = json.load(f)
+                
+                # Validation: detected massive drop (normalization fix case)
+                # If the last entry has > 1M BTC OI, it's likely corrupted/raw data
+                if data and data[-1].get('total_oi', 0) > 1000000:
+                    print("⚠️ OI History corrupted/unnormalized (OI > 1M). Resetting history.")
+                    return deque(maxlen=self.MAX_HISTORY)
+                    
                 return deque(data, maxlen=self.MAX_HISTORY)
         except Exception:
             pass
