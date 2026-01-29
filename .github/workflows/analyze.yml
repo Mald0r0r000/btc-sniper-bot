@@ -5,11 +5,8 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  # Exécution toutes les 5 minutes
-  schedule:
-    - cron: '*/5 * * * *'
-  
-  # Permet aussi l'exécution manuelle
+  # Déclencheur externe uniquement (via Cron-Job.org ou autre)
+  # pour garantir une exécution toutes les 5 minutes.
   workflow_dispatch:
     inputs:
       mode:
