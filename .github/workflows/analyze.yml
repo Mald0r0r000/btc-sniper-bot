@@ -1,5 +1,9 @@
 name: BTC Sniper Bot 24/7
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   # Exécution toutes les 5 minutes
   schedule:
