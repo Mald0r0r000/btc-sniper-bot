@@ -632,12 +632,12 @@ class DecisionEngineV2:
         score = 50.0
         
         # Order Book imbalance (Weight: LOW - Not predictive in backtest)
-        # Reduced max impact from 20 to 10
+        # Reduced max impact from 10 to 5 (Noise reduction)
         bid_ratio = self.ob.get('bid_ratio_pct', 50)
         if bid_ratio > 60:
-            score += (bid_ratio - 50) * 0.2  # Reduced
+            score += (bid_ratio - 50) * 0.1  # Very Low Impact
         elif bid_ratio < 40:
-            score -= (50 - bid_ratio) * 0.2  # Reduced
+            score -= (50 - bid_ratio) * 0.1  # Very Low Impact
         
         # CVD (Weight: HIGH - Predictive)
         # MTF Composite Score Strategy
@@ -645,10 +645,10 @@ class DecisionEngineV2:
         # score < 40 = Bearish
         cvd_mtf_score = self.cvd.get('composite_score', 50)
         
-        # Apply score deviation from 50 directly
-        # Max impact: ±25 points
+        # Apply score deviation from 50 directly - BOOSTED
+        # Max impact: ±35 points (was ±25)
         cvd_deviation = cvd_mtf_score - 50
-        score += (cvd_deviation * 0.5) 
+        score += (cvd_deviation * 0.7) 
         
         # Bonus for Confluence (All aligned)
         confluence = self.cvd.get('confluence', 'MIXED')
@@ -685,21 +685,20 @@ class DecisionEngineV2:
             
         # KDJ Momentum (Oscillator)
         # Updated Logic (User Correction + Statistical Analysis):
-        # High J (>80) = Overbought/Sell -> Penalize Score
-        # Low J (<20) = Oversold/Buy -> Boost Score
-        # This aligns with the negative correlation found (-0.36)
+        # High J (>80) = Overbought/Sell -> Strong Bearish Predictor (-0.44%)
+        # Low J (<20) = Oversold/Buy -> Bullish Predictor (+0.11%)
         
         kdj_values = self.kdj.get('values', {})
         j_val = kdj_values.get('j', 50)
         
-        # Penalize High J (Overbought)
+        # Penalize High J (Overbought) - BOOSTED IMPACT
         if j_val > 80:
-            penalty = (j_val - 80) * 1.5  # Max penalty ~30 points if J=100
+            penalty = (j_val - 80) * 2.0  # Max penalty ~40 points if J=100 (was 1.5)
             score -= penalty
             
-        # Boost Low J (Oversold)
+        # Boost Low J (Oversold) - BOOSTED IMPACT
         elif j_val < 20:
-            bonus = (20 - j_val) * 1.5    # Max bonus ~30 points if J=0
+            bonus = (20 - j_val) * 2.0    # Max bonus ~40 points if J=0 (was 1.5)
             score += bonus
             
         # Slope confirmation (only if favorable)
