@@ -151,16 +151,16 @@ class DecisionEngineV2:
         'sentiment': 5,
         'macro': 10
     },
-    # Intraday 1H-2D - Optimisé (Post-Backtest 2026)
-    # Findings: OI & CVD are King. KDJ needs to be inverted. OB is noise.
+    # Intraday 1H-2D - Optimisé (Post-Backtest 2026 - 9% Fund Update)
+    # Findings: Tech/Derivs heavy. Fund reduced to 3% each to unlock Shorts while keeping Longs > 54.5.
     'intraday_1h_2d': {
-        'technical': 35,        # Adjusted (-5)
+        'technical': 38,        # +3
         'structure': 15,        
         'multi_exchange': 10,   
-        'derivatives': 25,      
-        'onchain': 5,           
-        'sentiment': 5,         
-        'macro': 5              # +5 (Activé avec nouvelle logique DXY)
+        'derivatives': 28,      # +3
+        'onchain': 3,           # -2 (3%)
+        'sentiment': 3,         # -2 (3%)
+        'macro': 3              # -2 (3%)
     }
 }
     
@@ -1111,8 +1111,9 @@ class DecisionEngineV2:
         
         # 3. Logique d'Absorption
         if delta_1h < -0.5: # OI Flush significatif (> 0.5%)
-            if composite_score > 55:
+            if composite_score > 54.5:
                 # Bullish Divergence: Prix/OI descendent mais Score soutient la hausse
+                # Threshold ajusté à 54.5 pour compenser la réduction des poids fondamentaux
                 return SignalType.ABSORPTION_BUY
             elif composite_score < 45:
                 # Bearish Divergence: Prix/OI montent mais Score soutient la baisse
