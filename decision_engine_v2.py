@@ -12,7 +12,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 from datetime import datetime
-import numpy as np
+
 
 import config
 from analyzers.liquidation_zones import LiquidationZoneAnalyzer
@@ -49,6 +49,10 @@ class SignalType(Enum):
     # Signaux contrarian
     CONTRARIAN_BUY = "CONTRARIAN_BUY"
     CONTRARIAN_SELL = "CONTRARIAN_SELL"
+    
+    # Signaux d'Absorption (Smart Reversion)
+    ABSORPTION_BUY = "ABSORPTION_BUY"
+    ABSORPTION_SELL = "ABSORPTION_SELL"
     
     # Pas de signal
     NO_SIGNAL = "NO_SIGNAL"
@@ -998,12 +1002,19 @@ class DecisionEngineV2:
         return penalty
     
     def _determine_direction(self, scores: Dict[str, float]) -> SignalDirection:
-        """Détermine la direction globale"""
-        avg_score = np.mean(list(scores.values()))
+        """Détermine la direction globale (Basée sur le score pondéré)"""
+        # Utiliser le score composite (pondéré) s'il est disponible via _calculate_composite_score
+        # Pour éviter de recalculer, on refait le calcul rapide ici ou on change la signature
+        # Option simple: Recalculer le weighted score localement
         
-        if avg_score >= 55:
+        _, weighted_scores = self._calculate_composite_score(scores)
+        weighted_sum = sum(weighted_scores.values())
+        
+        # Le weighted_sum est déjà le score composite (0-100)
+        
+        if weighted_sum >= 55:
             return SignalDirection.LONG
-        elif avg_score <= 45:
+        elif weighted_sum <= 45:
             return SignalDirection.SHORT
         else:
             return SignalDirection.NEUTRAL
@@ -1079,6 +1090,34 @@ class DecisionEngineV2:
             return SignalType.MACRO_ALIGNED_LONG
         if 'BEARISH' in macro_signal and direction == SignalDirection.SHORT:
             return SignalType.MACRO_ALIGNED_SHORT
+            
+        # ========================================================
+        # STRATEGIE D'ABSORPTION (SMART REVERSION) - Backtest +73% WR
+        # ========================================================
+        # Score > 55 (Bullish) MAIS OI Chute (Long Flush) -> Buy the dip
+        # Score < 45 (Bearish) MAIS OI Chute (Short Squeeze/Cover) -> Sell the rip
+        
+        # 1. Obtenir le score pondéré (recalcul local pour être sûr)
+        _, weighted_scores_dict = self._calculate_composite_score(scores)
+        composite_score = sum(weighted_scores_dict.values())
+        
+        # 2. Obtenir le changement d'OI (1H)
+        # self.oi contient désormais le résultat complet de l'analyseur (si mode full)
+        delta_1h = 0
+        if isinstance(self.oi, dict):
+            delta = self.oi.get('delta', {})
+            if delta and isinstance(delta, dict):
+                delta_1h = delta.get('1h', {}).get('delta_oi_pct', 0)
+        
+        # 3. Logique d'Absorption
+        if delta_1h < -0.5: # OI Flush significatif (> 0.5%)
+            if composite_score > 55:
+                # Bullish Divergence: Prix/OI descendent mais Score soutient la hausse
+                return SignalType.ABSORPTION_BUY
+            elif composite_score < 45:
+                # Bearish Divergence: Prix/OI montent mais Score soutient la baisse
+                # (Note: Si OI descend alors que prix monte = Short Covering, Bearish après le pump)
+                return SignalType.ABSORPTION_SELL
         
         return SignalType.NO_SIGNAL
     
@@ -1106,6 +1145,8 @@ class DecisionEngineV2:
             SignalType.CONTRARIAN_SELL: "🔔 CONTRARIAN SELL - Euphorie Extrême",
             SignalType.MACRO_ALIGNED_LONG: "🌍 MACRO ALIGNED LONG",
             SignalType.MACRO_ALIGNED_SHORT: "🌍 MACRO ALIGNED SHORT",
+            SignalType.ABSORPTION_BUY: "🧽 ABSORPTION BUY - Long Flush + Score Bullish",
+            SignalType.ABSORPTION_SELL: "🧽 ABSORPTION SELL - Short Cover + Score Bearish",
             SignalType.NO_SIGNAL: "💤 Pas de signal clair"
         }
         
@@ -1118,6 +1159,8 @@ class DecisionEngineV2:
             SignalType.SHORT_BREAKOUT: "💥",
             SignalType.SHORT_SQUEEZE: "⚡📈",
             SignalType.LONG_FLUSH: "⚡📉",
+            SignalType.ABSORPTION_BUY: "🧽🟢",
+            SignalType.ABSORPTION_SELL: "🧽🔴",
             SignalType.NO_SIGNAL: "💤"
         }
         

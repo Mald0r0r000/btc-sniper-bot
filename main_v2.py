@@ -474,7 +474,7 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         onchain_data=onchain_result,
         sentiment_data=sentiment_result,
         macro_data=macro_result,
-        open_interest=oi_data,
+        open_interest=oi_analysis_result if (mode == 'full' and oi_analysis_result) else oi_data,
         options_data=options_result,
         trading_style='intraday_1h_2d',  # Poids optimisés pour signaux 1H-2D
         consistency_data=consistency_data,  # For quality filters
