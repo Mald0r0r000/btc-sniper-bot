@@ -52,6 +52,9 @@ jobs:
           GIST_ID: ${{ secrets.GIST_ID }}
           # Macro Data
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          # Google Sheets Blackbox
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
         run: |
           python runner.py
       
