@@ -80,15 +80,22 @@ class GoogleSheetDataStore:
         try:
             # Check if it's a file path or JSON content
             if os.path.exists(self.credentials_json):
+                print(f"🔑 Auth using Service Account File: {self.credentials_json}")
                 creds = Credentials.from_service_account_file(self.credentials_json, scopes=self.scope)
             else:
                 # Assume it's a JSON string
-                print(f"🔑 Using Credentials JSON from Env (len={len(self.credentials_json)})")
-                info = json.loads(self.credentials_json)
-                creds = Credentials.from_service_account_info(info, scopes=self.scope)
+                print(f"🔑 Auth using JSON String from Env (Length: {len(self.credentials_json)} chars)")
+                # Print partial key ID for debugging (safe)
+                try:
+                    info = json.loads(self.credentials_json)
+                    print(f"   Service Account Email: {info.get('client_email', 'UNKNOWN')}")
+                    creds = Credentials.from_service_account_info(info, scopes=self.scope)
+                except json.JSONDecodeError as e:
+                    print(f"❌ JSON Decode Error for Credentials: {e}")
+                    return
             
             self.client = gspread.authorize(creds)
-            print("✅ Google Client Authenticated")
+            print("✅ Google Client Authenticated Successfully")
             
         except Exception as e:
             print(f"❌ Google Auth Error: {e}")
@@ -177,13 +184,15 @@ class GoogleSheetDataStore:
             return False
             
         try:
+            print(f"🔍 Accessing Sheet ID: {self.sheet_id[:5]}...{self.sheet_id[-5:]}")
             sheet = self._get_sheet()
             if not sheet:
+                print("❌ Failed to get sheet object.")
                 return False
                 
             # Vérifier headers (si feuille vide)
             if sheet.row_count == 0 or not sheet.row_values(1):
-                print("📝 Initializing Sheet Headers...")
+                print("📝 Initializing Sheet Headers (Sheet was empty)...")
                 sheet.append_row(self.HEADERS)
             
             # Aplatir et ajouter
@@ -197,12 +206,15 @@ class GoogleSheetDataStore:
                 else:
                     clean_row.append(str(item)) # Convert everything to string for safety initially
             
+            print(f"📤 Appending row with {len(clean_row)} columns...")
             sheet.append_row(clean_row)
-            print(f"📊 Signal recorded in Google Sheet (Row {len(sheet.col_values(1)) + 1})")
+            print(f"📊 Signal SUCCESSFULLY recorded in Google Sheet (Row {len(sheet.col_values(1))})")
             return True
             
         except Exception as e:
             print(f"❌ Google Sheet Save Error: {e}")
+            import traceback
+            traceback.print_exc()
             return False
 
 
