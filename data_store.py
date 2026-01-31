@@ -79,8 +79,14 @@ class GistDataStore:
             print(f"❌ Erreur création Gist: {e}")
             return None
     
-    def read_signals(self) -> List[Dict[str, Any]]:
-        """Lit tous les signaux stockés"""
+    def read_signals(self) -> Optional[List[Dict[str, Any]]]:
+        """
+        Lit tous les signaux stockés
+        Returns:
+            List[Dict]: Liste des signaux si succès
+            []: Si fichier vide ou Gist nouveau
+            None: Si ERREUR de lecture (pour éviter d'écraser)
+        """
         if not self.github_token or not self.gist_id:
             return []
         
@@ -88,21 +94,30 @@ class GistDataStore:
             response = requests.get(
                 f"{self.api_base}/gists/{self.gist_id}",
                 headers=self._headers(),
-                timeout=15
+                timeout=30  # Increased timeout
             )
             
             if response.ok:
                 gist_data = response.json()
-                content = gist_data["files"][self.GIST_FILENAME]["content"]
+                files = gist_data.get("files", {})
+                
+                if self.GIST_FILENAME not in files:
+                    print(f"⚠️ Fichier {self.GIST_FILENAME} absent du Gist")
+                    return []
+                    
+                content = files[self.GIST_FILENAME]["content"]
+                if not content:
+                    return []
+                    
                 data = json.loads(content)
                 return data.get("signals", [])
             else:
-                print(f"⚠️ Erreur lecture Gist: {response.status_code}")
-                return []
+                print(f"⚠️ Erreur lecture Gist: {response.status_code} - {response.text[:100]}")
+                return None # Return None to indicate failure
                 
         except Exception as e:
             print(f"⚠️ Erreur lecture Gist: {e}")
-            return []
+            return None # Return None to indicate failure
     
     def save_signal(self, signal_data: Dict[str, Any]) -> bool:
         """
@@ -125,6 +140,12 @@ class GistDataStore:
             # Lire les signaux existants
             signals = self.read_signals()
             
+            # SECURITE CRITIQUE: Si la lecture a échoué (None), ON NE SAUVEGARDE PAS
+            # Cela évite d'écraser tout l'historique avec une liste vide
+            if signals is None:
+                print("❌ ABORT: Impossible de lire l'historique. Sauvegarde annulée pour éviter perte de données.")
+                return False
+                
             # Ajouter le nouveau signal avec timestamp
             signal_data["stored_at"] = datetime.now(timezone.utc).isoformat()
             signals.append(signal_data)
@@ -148,7 +169,7 @@ class GistDataStore:
                         }
                     }
                 },
-                timeout=15
+                timeout=30
             )
             
             if response.ok:
