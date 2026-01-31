@@ -2,11 +2,209 @@
 Data Store - Stockage des signaux via GitHub Gist
 Permet de conserver l'historique des signaux pour analyse et ML
 """
-import os
 import json
 import requests
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
+import os
+
+# Google Sheets dependencies (lazy import to avoid crash if not installed)
+try:
+    import gspread
+    from google.oauth2.service_account import Credentials
+    GOOGLE_DEPS_AVAILABLE = True
+except ImportError:
+    GOOGLE_DEPS_AVAILABLE = False
+
+
+class GoogleSheetDataStore:
+    """
+    Stocke les signaux "Blackbox" dans Google Sheets pour analyse immédiate.
+    Implémente le schéma "Ultimate" aplati.
+    """
+    
+    # Ultimate Schema Headers
+    HEADERS = [
+        # --- Core ---
+        "Timestamp", "Signal_Type", "Direction", "Confidence", "Price",
+        "TP1", "TP2", "SL", "RR_Ratio",
+        
+        # --- Composite Scores ---
+        "Score_Tech", "Score_Struct", "Score_Sent", "Score_OnChain", "Score_Macro", "Score_Deriv",
+        
+        # --- Deep Alpha ---
+        "Quantum_State", "VP_Context", "Risk_Env", "Fear_Greed",
+        
+        # --- Fluid Dynamics ---
+        "Fluid_Venturi_Score", "Fluid_Compression_Detected", "Fluid_Direction", "Fluid_Breakout_Prob",
+        
+        # --- Hyperliquid Whales ---
+        "HL_Whale_Sentiment", "HL_Long_Ratio", "HL_Whale_Count", "HL_Weighted_Long", "HL_Weighted_Short",
+        
+        # --- Order Book ---
+        "OB_Bid_Ratio", "OB_Pressure", "OB_Imbalance",
+        
+        # --- CVD Multi-Timeframe ---
+        "CVD_Score_Composite", "CVD_Trend", "CVD_Aggression",
+        "CVD_5m_Net", "CVD_5m_Score", "CVD_5m_Aggression",
+        "CVD_1h_Net", "CVD_1h_Score",
+        "CVD_4h_Net", "CVD_4h_Score",
+        
+        # --- Technicals ---
+        "Tech_KDJ_J", "Tech_ADX", "Tech_ADX_Trend", "Tech_MACD_Trend",
+        "MTF_MACD_Composite", "MTF_Divergence_Type",
+        
+        # --- OI ---
+        "OI_Total", "OI_Delta_1h"
+    ]
+
+    def __init__(self, sheet_id: str = None, credentials_json: str = None):
+        self.sheet_id = sheet_id or os.getenv('GOOGLE_SHEET_ID')
+        # Credentials can be a file path or JSON string in env var
+        self.credentials_json = credentials_json or os.getenv('GOOGLE_CREDENTIALS_JSON')
+        self.scope = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        self.client = None
+        self.sheet = None
+        
+        if not GOOGLE_DEPS_AVAILABLE:
+            print("⚠️ Google Deps missing (gspread). Google Sheet storage disabled.")
+            return
+
+        if self.credentials_json:
+            self._authenticate()
+
+    def _authenticate(self):
+        try:
+            # Check if it's a file path or JSON content
+            if os.path.exists(self.credentials_json):
+                creds = Credentials.from_service_account_file(self.credentials_json, scopes=self.scope)
+            else:
+                # Assume it's a JSON string
+                print(f"🔑 Using Credentials JSON from Env (len={len(self.credentials_json)})")
+                info = json.loads(self.credentials_json)
+                creds = Credentials.from_service_account_info(info, scopes=self.scope)
+            
+            self.client = gspread.authorize(creds)
+            print("✅ Google Client Authenticated")
+            
+        except Exception as e:
+            print(f"❌ Google Auth Error: {e}")
+
+    def _get_sheet(self):
+        if not self.client or not self.sheet_id:
+            return None
+        
+        try:
+            # Open by Key
+            sheet_file = self.client.open_by_key(self.sheet_id)
+            # Select first worksheet
+            return sheet_file.sheet1
+        except Exception as e:
+            print(f"❌ Error opening sheet {self.sheet_id}: {e}")
+            return None
+
+    def _flatten_signal(self, signal_record: Dict[str, Any]) -> List[Any]:
+        """Convertit le signal JSON complexe en une liste de valeurs ordonnée"""
+        s = signal_record # Raccourci
+        
+        # Extraction sécurisée avec valeurs par défaut
+        sig = s.get("sig", {})
+        ds = s.get("ds", {})
+        tgt = s.get("tgt", {})
+        ctx = s.get("ctx", {})
+        fd = s.get("fd", {})
+        fd_v = fd.get("v", {})
+        hl = s.get("hl", {})
+        ob = s.get("ob", {})
+        cvd = s.get("cvd", {})
+        cvd_mtf = cvd.get("mtf", {})
+        tech = s.get("tech", {})
+        mtf = s.get("mtf", {})
+        oi = s.get("oi", {})
+        
+        # Calculate RR if possible
+        tp1 = tgt.get("tp1", 0)
+        sl = tgt.get("sl", 0)
+        px = s.get("px", 0)
+        rr = 0
+        if px > 0 and sl > 0 and tp1 > 0:
+            risk = abs(px - sl)
+            reward = abs(tp1 - px)
+            if risk > 0:
+                rr = round(reward / risk, 2)
+
+        return [
+            # --- Core ---
+            s.get("ts"), sig.get("t"), sig.get("d"), sig.get("c"), s.get("px"),
+            tgt.get("tp1"), tgt.get("tp2"), tgt.get("sl"), rr,
+            
+            # --- Scores ---
+            ds.get("technical"), ds.get("structure"), ds.get("sentiment"), 
+            ds.get("onchain"), ds.get("macro"), ds.get("derivatives"),
+            
+            # --- Context ---
+            ctx.get("qs"), ctx.get("vpc"), ctx.get("re"), ctx.get("fg"),
+            
+            # --- Fluid ---
+            fd_v.get("cs"), fd_v.get("cd"), fd_v.get("dir"), fd_v.get("bp"),
+            
+            # --- Hyperliquid ---
+            hl.get("ws"), hl.get("lr"), hl.get("wc"), hl.get("wl"), hl.get("wsh"),
+            
+            # --- OB ---
+            ob.get("br"), ob.get("pr"), ob.get("im"),
+            
+            # --- CVD ---
+            cvd.get("cs"), cvd.get("tr"), cvd.get("ag"),
+            cvd_mtf.get("5m", {}).get("nc"), cvd_mtf.get("5m", {}).get("sc"), cvd_mtf.get("5m", {}).get("ar"),
+            cvd_mtf.get("1h", {}).get("nc"), cvd_mtf.get("1h", {}).get("sc"),
+            cvd_mtf.get("4h", {}).get("nc"), cvd_mtf.get("4h", {}).get("sc"),
+            
+            # --- Tech ---
+            tech.get("kj"), tech.get("adx"), tech.get("atd"), tech.get("mcd", {}).get("t"),
+            mtf.get("cs"), (mtf.get("dv") or {}).get("t", "NONE"),
+            
+            # --- OI ---
+            oi.get("t"), oi.get("d1h")
+        ]
+
+    def save_signal(self, signal_record: Dict[str, Any]) -> bool:
+        """Publie le signal aplati sur Google Sheet"""
+        if not self.client:
+            return False
+            
+        try:
+            sheet = self._get_sheet()
+            if not sheet:
+                return False
+                
+            # Vérifier headers (si feuille vide)
+            if sheet.row_count == 0 or not sheet.row_values(1):
+                print("📝 Initializing Sheet Headers...")
+                sheet.append_row(self.HEADERS)
+            
+            # Aplatir et ajouter
+            row_data = self._flatten_signal(signal_record)
+            
+            # Convertir en types compatibles JSON (str pour dates, float pour nombres)
+            clean_row = []
+            for item in row_data:
+                if item is None:
+                    clean_row.append("")
+                else:
+                    clean_row.append(str(item)) # Convert everything to string for safety initially
+            
+            sheet.append_row(clean_row)
+            print(f"📊 Signal recorded in Google Sheet (Row {len(sheet.col_values(1)) + 1})")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Google Sheet Save Error: {e}")
+            return False
+
 
 
 class GistDataStore:

@@ -29,6 +29,11 @@ def run_scheduled_analysis() -> Dict[str, Any]:
     # Initialiser le notifier et le data store
     notifier = TelegramNotifier()
     data_store = GistDataStore()
+    
+    # Initialiser Google Sheet Data Store
+    from data_store import GoogleSheetDataStore
+    gs_store = GoogleSheetDataStore()
+    
     telegram_enabled = notifier.is_configured()
     
     if telegram_enabled:
@@ -42,6 +47,11 @@ def run_scheduled_analysis() -> Dict[str, Any]:
         print("📝 Gist sera créé à la première sauvegarde")
     else:
         print("⚠️ Stockage désactivé (GITHUB_TOKEN manquant)")
+        
+    if gs_store.client and gs_store.sheet_id:
+        print("✅ Google Sheet 'Blackbox' configuré")
+    else:
+        print("⚠️ Google Sheet non configuré (GOOGLE_CREDENTIALS/ID manquants)")
     
     # Récupérer l'historique pour consistency check
     from consistency_checker import ConsistencyChecker
@@ -310,6 +320,10 @@ def run_scheduled_analysis() -> Dict[str, Any]:
             } if signal.get("smart_entry") else None
         }
         data_store.save_signal(signal_record)
+        
+        # Sauvegarder dans Google Sheet (Blackbox)
+        if gs_store.client:
+            gs_store.save_signal(signal_record)
         
         # ========== FILTRAGE QUALITÉ DES SIGNAUX ==========
         # Basé sur backtest 13-17 Jan 2026:
