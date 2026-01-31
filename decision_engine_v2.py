@@ -633,11 +633,12 @@ class DecisionEngineV2:
         
         # Order Book imbalance (Weight: LOW - Not predictive in backtest)
         # Reduced max impact from 10 to 5 (Noise reduction)
+        # UPDATE: Further reduced impact to almost zero (0.05 multiplier)
         bid_ratio = self.ob.get('bid_ratio_pct', 50)
         if bid_ratio > 60:
-            score += (bid_ratio - 50) * 0.1  # Very Low Impact
+            score += (bid_ratio - 50) * 0.05  # Minimal Impact
         elif bid_ratio < 40:
-            score -= (50 - bid_ratio) * 0.1  # Very Low Impact
+            score -= (50 - bid_ratio) * 0.05  # Minimal Impact
         
         # CVD (Weight: HIGH - Predictive)
         # MTF Composite Score Strategy
@@ -647,8 +648,9 @@ class DecisionEngineV2:
         
         # Apply score deviation from 50 directly - BOOSTED
         # Max impact: ±35 points (was ±25)
+        # UPDATE: Increased multiplier from 0.7 to 0.9 (Flow is King)
         cvd_deviation = cvd_mtf_score - 50
-        score += (cvd_deviation * 0.7) 
+        score += (cvd_deviation * 0.9) 
         
         # Bonus for Confluence (All aligned)
         confluence = self.cvd.get('confluence', 'MIXED')
@@ -692,13 +694,14 @@ class DecisionEngineV2:
         j_val = kdj_values.get('j', 50)
         
         # Penalize High J (Overbought) - BOOSTED IMPACT
+        # UPDATE: Increased multiplier to 2.5 (Strong Reversion Predictor)
         if j_val > 80:
-            penalty = (j_val - 80) * 2.0  # Max penalty ~40 points if J=100 (was 1.5)
+            penalty = (j_val - 80) * 2.5  # Max penalty ~50 points
             score -= penalty
             
         # Boost Low J (Oversold) - BOOSTED IMPACT
         elif j_val < 20:
-            bonus = (20 - j_val) * 2.0    # Max bonus ~40 points if J=0 (was 1.5)
+            bonus = (20 - j_val) * 2.5    # Max bonus ~50 points
             score += bonus
             
         # Slope confirmation (only if favorable)
