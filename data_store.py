@@ -110,7 +110,10 @@ class GoogleSheetDataStore:
             # Select first worksheet
             return sheet_file.sheet1
         except Exception as e:
-            print(f"❌ Error opening sheet {self.sheet_id}: {e}")
+            print(f"❌ Error opening sheet {self.sheet_id}: {repr(e)}")
+            # Print traceback to see exactly where gspread failed (HTTP error, etc)
+            import traceback
+            traceback.print_exc()
             return None
 
     def _flatten_signal(self, signal_record: Dict[str, Any]) -> List[Any]:
