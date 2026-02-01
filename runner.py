@@ -275,6 +275,7 @@ def run_scheduled_analysis() -> Dict[str, Any]:
             # Institutional Data
             "gex": indicators.get("derivatives", {}).get("gex_profile", {}), # Phase 1
             "liq": indicators.get("liquidation", {}), # Phase 2
+            "prem": indicators.get("premium", {}), # Phase 3
             
             # Hyperliquid whale data (enhanced with two-tier tracking)
             "hl": {

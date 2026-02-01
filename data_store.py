@@ -61,6 +61,7 @@ class GoogleSheetDataStore:
         "Inst_GEX_Net_USD_M", "Inst_GEX_Regime", # GEX
         "Inst_Liq_Long_Price", "Inst_Liq_Long_Dist", "Inst_Liq_Long_Int", # Liquidation Long
         "Inst_Liq_Short_Price", "Inst_Liq_Short_Dist", "Inst_Liq_Short_Int", # Liquidation Short
+        "Inst_Prem_Gap_USD", "Inst_Prem_Signal", # Premium
         
         "MACD_3D_Trend", "MACD_3D_Slope", 
         "MACD_1D_Trend", "MACD_1D_Slope",
@@ -204,6 +205,7 @@ class GoogleSheetDataStore:
             s.get("gex", {}).get("net_gex_usd_m"), s.get("gex", {}).get("regime"),
             s.get("liq", {}).get("nearest_long_liq", {}).get("price"), s.get("liq", {}).get("nearest_long_liq", {}).get("distance_pct"), s.get("liq", {}).get("nearest_long_liq", {}).get("intensity"),
             s.get("liq", {}).get("nearest_short_liq", {}).get("price"), s.get("liq", {}).get("nearest_short_liq", {}).get("distance_pct"), s.get("liq", {}).get("nearest_short_liq", {}).get("intensity"),
+            s.get("prem", {}).get("gap_usd"), s.get("prem", {}).get("signal"), # Premium
             
             # MACD Precision
             mtf.get("tf", {}).get("3d", {}).get("t"), mtf.get("tf", {}).get("3d", {}).get("sl"), 

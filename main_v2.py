@@ -123,6 +123,13 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     # analysis_results['indicators']['liquidation'] = liq_result # This line was in the instruction but analysis_results is not defined here. Assuming it's a placeholder or should be removed.
     print(f"   💀 Liquidation Heatmap: Longs @ {liq_result['nearest_long_liq']['price']} | Shorts @ {liq_result['nearest_short_liq']['price']}")
 
+    # NEW: Premium Analysis (Spot vs Perp Gap)
+    from analyzers.premium import PremiumAnalyzer
+    prem_analyzer = PremiumAnalyzer()
+    prem_result = prem_analyzer.analyze(aggregated_data['raw_data']['tickers'])
+    analysis_results['indicators']['premium'] = prem_result
+    print(f"   🇺🇸 Coinbase Premium: ${prem_result['gap_usd']} ({prem_result['signal']})")
+    
     # Order Book Analysis
     ob_analyzer = OrderBookAnalyzer(order_book, current_price)
     ob_result = ob_analyzer.analyze()
