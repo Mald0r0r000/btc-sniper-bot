@@ -52,6 +52,7 @@ class GoogleSheetDataStore:
         
         # --- Technicals ---
         "Tech_KDJ_J", "Tech_ADX", "Tech_ADX_Trend", 
+        "Tech_DI_Plus", "Tech_DI_Minus", # ADDED: Raw DI values
         "MACD_3D_Trend", "MACD_3D_Slope", 
         "MACD_1D_Trend", "MACD_1D_Slope",
         "MTF_MACD_Composite", "MTF_Divergence_Type",
@@ -180,6 +181,7 @@ class GoogleSheetDataStore:
             
             # --- Tech ---
             tech.get("kj"), tech.get("adx"), tech.get("atd"), 
+            tech.get("dip"), tech.get("dim"), # ADDED: Raw DI values
             # MACD Precision
             mtf.get("tf", {}).get("3d", {}).get("t"), mtf.get("tf", {}).get("3d", {}).get("sl"), # 3D Trend/Slope
             mtf.get("tf", {}).get("1d", {}).get("t"), mtf.get("tf", {}).get("1d", {}).get("sl"), # 1D Trend/Slope
