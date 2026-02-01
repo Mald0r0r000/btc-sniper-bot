@@ -116,6 +116,13 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     # ==========================================
     print("\n🔬 Analyse des indicateurs core...")
     
+    # Init storage
+    analysis_results = {
+        'indicators': {},
+        'signals': {},
+        'metadata': {}
+    }
+    
     # NEW: Liquidation Analysis (1H Swings)
     from analyzers.liquidation import LiquidationAnalyzer
     liq_analyzer = LiquidationAnalyzer(df_meso)
