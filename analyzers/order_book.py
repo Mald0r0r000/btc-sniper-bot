@@ -68,12 +68,22 @@ class OrderBookAnalyzer:
             pressure = "HAUSSIERE"
         elif ask_ratio > 60:
             pressure = "BAISSIERE"
+            
+        # 7. Spread (BPS)
+        spread_bps = 0
+        if self.bids and self.asks:
+            best_bid = max(self.bids, key=lambda x: x[0])[0]
+            best_ask = min(self.asks, key=lambda x: x[0])[0]
+            if best_ask > 0:
+                spread_bps = ((best_ask - best_bid) / best_ask) * 10000
+
         
         return {
             'bid_volume': vol_bids,
             'ask_volume': vol_asks,
             'bid_ratio_pct': round(bid_ratio, 1),
             'ask_ratio_pct': round(ask_ratio, 1),
+            'spread_bps': round(spread_bps, 2), # Added: Spread
             'pressure': pressure,
             'wall_bid': {
                 'price': max_bid[0],

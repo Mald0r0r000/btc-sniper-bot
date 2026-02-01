@@ -184,6 +184,20 @@ class OpenInterestAnalyzer:
         else:
             delta_4h_oi = delta_1h_oi
             delta_4h_pct = delta_1h_pct
+            
+        # Changement sur 24h (96 points - max history)
+        if len(self.history) >= 96:
+            h24_ago = self.history[0] # Oldest point
+            delta_24h_oi = current_oi - h24_ago.get('total_oi', current_oi)
+            delta_24h_pct = (delta_24h_oi / h24_ago.get('total_oi', 1) * 100)
+        elif len(self.history) > 0:
+            # Fallback to oldest available if < 24h
+            oldest = self.history[0]
+            delta_24h_oi = current_oi - oldest.get('total_oi', current_oi)
+            delta_24h_pct = (delta_24h_oi / oldest.get('total_oi', 1) * 100)
+        else:
+            delta_24h_oi = delta_4h_oi
+            delta_24h_pct = delta_4h_pct
         
         # Interpretation
         if delta_oi_pct > 2:
@@ -216,6 +230,10 @@ class OpenInterestAnalyzer:
             '4h': {
                 'delta_oi_btc': round(delta_4h_oi, 2),
                 'delta_oi_pct': round(delta_4h_pct, 3)
+            },
+            '24h': {
+                'delta_oi_btc': round(delta_24h_oi, 2),
+                'delta_oi_pct': round(delta_24h_pct, 3)
             },
             'interpretation': interpretation,
             'emoji': emoji
