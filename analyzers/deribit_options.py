@@ -15,6 +15,114 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 
+# === GEX CONFIGURATION ===
+class GEXConfig:
+    """
+    Configuration pour le calcul GEX optimisé
+    Basé sur les best practices de gex-tool_v3
+    """
+    def __init__(
+        self,
+        dte_min: int = 0,
+        dte_max: int = 65,
+        weight_quarterly: float = 3.0,
+        weight_monthly: float = 2.0,
+        weight_weekly: float = 1.0,
+        fridays_only: bool = True,
+        min_oi: float = 1.0
+    ):
+        self.dte_min = dte_min
+        self.dte_max = dte_max
+        self.weight_quarterly = weight_quarterly
+        self.weight_monthly = weight_monthly
+        self.weight_weekly = weight_weekly
+        self.fridays_only = fridays_only
+        self.min_oi = min_oi
+
+
+# === HELPER FUNCTIONS ===
+def calculate_dte(expiry_timestamp: int) -> float:
+    """
+    Calcule Days To Expiry en jours
+    
+    Args:
+        expiry_timestamp: Timestamp d'expiration en milliseconds
+    
+    Returns:
+        Nombre de jours jusqu'à l'expiration
+    """
+    now = datetime.now(timezone.utc).timestamp() * 1000
+    dte_days = (expiry_timestamp - now) / (1000 * 86400)
+    return dte_days
+
+
+def is_last_friday_of_month(date: datetime) -> bool:
+    """
+    Détecte si une date est le dernier vendredi du mois
+    Utilisé pour identifier les monthly expirations
+    
+    Args:
+        date: Date à vérifier
+    
+    Returns:
+        True si c'est le dernier vendredi
+    """
+    from datetime import timedelta
+    
+    # Calculer le dernier jour du mois
+    if date.month == 12:
+        next_month = date.replace(year=date.year + 1, month=1, day=1)
+    else:
+        next_month = date.replace(month=date.month + 1, day=1)
+    
+    last_day = next_month - timedelta(days=1)
+    
+    # Trouver le dernier vendredi
+    days_to_friday = (last_day.weekday() - 4) % 7
+    last_friday = last_day - timedelta(days=days_to_friday)
+    
+    return date.date() == last_friday.date()
+
+
+def detect_expiration_type(instrument_name: str, expiry_timestamp: int) -> Tuple[bool, bool, int]:
+    """
+    Détecte le type d'expiration (quarterly, monthly, weekly)
+    
+    Args:
+        instrument_name: Nom de l'instrument (ex: BTC-27DEC24-100000-C)
+        expiry_timestamp: Timestamp d'expiration
+    
+    Returns:
+        (is_quarterly, is_monthly, weekday)
+    """
+    try:
+        # Parser la date d'expiration
+        parts = instrument_name.split("-")
+        if len(parts) < 2:
+            return False, False, -1
+        
+        date_str = parts[1]
+        expiry_date = datetime.strptime(date_str, "%d%b%y")
+        
+        weekday = expiry_date.weekday()  # 0=Lundi, 4=Vendredi
+        month = expiry_date.month
+        
+        # Vérifier si c'est un vendredi
+        is_friday = (weekday == 4)
+        
+        # Vérifier si c'est le dernier vendredi du mois
+        is_monthly = is_friday and is_last_friday_of_month(expiry_date)
+        
+        # Quarterly = dernier vendredi des mois Q (Mars, Juin, Sept, Déc)
+        is_quarterly = is_monthly and (month in [3, 6, 9, 12])
+        
+        return is_quarterly, is_monthly, weekday
+        
+    except Exception as e:
+        logger.debug(f"Erreur parsing expiration type pour {instrument_name}: {e}")
+        return False, False, -1
+
+
 class DeribitOptionsAnalyzer:
     """
     Analyseur d'options BTC via API Deribit (gratuit, pas de clé requise)
@@ -42,12 +150,13 @@ class DeribitOptionsAnalyzer:
         if self._http:
             await self._http.aclose()
     
-    async def analyze(self, current_price: float = None) -> Dict[str, Any]:
+    async def analyze(self, current_price: float = None, gex_config: Optional[GEXConfig] = None) -> Dict[str, Any]:
         """
         Analyse complète du marché des options BTC
         
         Args:
             current_price: Prix BTC actuel (optionnel, sera fetché si non fourni)
+            gex_config: Configuration pour le calcul GEX (optionnel)
             
         Returns:
             Dict avec max pain, P/C ratio, IV, OI par strike, etc.
@@ -65,8 +174,8 @@ class DeribitOptionsAnalyzer:
             if not instruments:
                 return {"error": "No option instruments found"}
             
-            # 3. Récupérer les données de book pour chaque instrument (top 20 par OI)
-            options_data = await self._fetch_options_data(client, instruments[:50])
+            # 3. Récupérer les données de book pour chaque instrument (top 300 par OI pour meilleure couverture GEX)
+            options_data = await self._fetch_options_data(client, instruments[:300])
             
             # 4. Calculer les métriques
             max_pain = self._calculate_max_pain(options_data, current_price)
@@ -76,7 +185,7 @@ class DeribitOptionsAnalyzer:
             nearest_expiry = self._get_nearest_expiry_analysis(options_data, current_price)
             
             # 5. Calculer GEX (Gamma Exposure)
-            gex_profile = self._calculate_gex_profile(options_data, current_price)
+            gex_profile = self._calculate_gex_profile(options_data, current_price, config=gex_config)
             
             # 6. Score global
             options_score = self._calculate_options_score(
@@ -461,33 +570,103 @@ class DeribitOptionsAnalyzer:
             "options_count": len(expiry_opts)
         }
     
-    def _calculate_gex_profile(self, options: List[Dict], current_price: float) -> Dict:
+    def _calculate_gex_profile(
+        self, 
+        options: List[Dict], 
+        current_price: float,
+        config: Optional[GEXConfig] = None
+    ) -> Dict:
         """
-        Calcule l'exposition Gamma (GEX) des Dealers.
+        Calcule l'exposition Gamma (GEX) des Dealers avec optimisations.
+        
+        Améliorations vs version précédente:
+        - Filtrage par horizon temporel (DTE)
+        - Pondération par type d'expiration (quarterly 3x, monthly 2x, weekly 1x)
+        - Filtre "fridays only" pour réduire le bruit
+        - Interpolation linéaire pour Zero Gamma précis
+        
+        Args:
+            options: Liste des options
+            current_price: Prix spot actuel
+            config: Configuration GEX (défaut: 65j horizon)
         
         Formula: Gamma * OI * Spot^2 * 0.01 (Dollar Gamma per 1% move)
         """
+        if config is None:
+            config = GEXConfig()  # Défauts: 65j, pondération 3x/2x/1x
+        
         net_gamma = 0
         total_gamma = 0
         gex_by_strike = defaultdict(float)
         
-        # 1. Calculate GEX per strike
+        # Tracking pour warnings
+        missed_quarterly_dtes = []
+        filtered_count = 0
+        total_count = len(options)
+        
+        # 1. Calculate GEX per strike avec filtres
         for opt in options:
+            instrument_name = opt.get("instrument_name", "")
+            expiry_ts = opt.get("expiry_timestamp", 0)
             gamma = opt.get("greeks", {}).get("gamma", 0)
             oi = opt.get("open_interest", 0)
             strike = opt.get("strike", 0)
+            
+            # === FILTRE 1: Open Interest minimum ===
+            if oi < config.min_oi:
+                filtered_count += 1
+                continue
+            
+            # === FILTRE 2: DTE (Days To Expiry) ===
+            dte_days = calculate_dte(expiry_ts)
+            
+            # Tracking quarterly manquées
+            is_quarterly, is_monthly, weekday = detect_expiration_type(instrument_name, expiry_ts)
+            
+            if dte_days > config.dte_max:
+                if is_quarterly:
+                    missed_quarterly_dtes.append(dte_days)
+                filtered_count += 1
+                continue
+            
+            if dte_days < config.dte_min:
+                filtered_count += 1
+                continue
+            
+            # === FILTRE 3: Fridays Only (optionnel) ===
+            if config.fridays_only and weekday != 4:
+                filtered_count += 1
+                continue
+            
+            # === FILTRE 4: Gamma valide ===
+            if gamma == 0 or gamma is None:
+                filtered_count += 1
+                continue
+            
+            # === CALCUL GEX avec PONDÉRATION ===
+            # Déterminer le poids selon le type d'expiration
+            if is_quarterly:
+                weight = config.weight_quarterly  # 3.0x par défaut
+            elif is_monthly:
+                weight = config.weight_monthly    # 2.0x par défaut
+            else:
+                weight = config.weight_weekly     # 1.0x par défaut
             
             # GEX en USD pour un mouvement de 1%
             # Gamma est coin-margined (en BTC), donc conversion :
             # GEX USD = Gamma * OI * Spot^2 / 100
             gex_value = (gamma * oi * (current_price ** 2)) / 100
             
+            # Appliquer la pondération
+            gex_value *= weight
+            
+            # Convention: 
+            # - Clients achètent CALLS → Dealers SHORT CALLS → Gamma positive
+            # - Clients achètent PUTS (hedge) → Dealers SHORT PUTS → Gamma négative
             if opt.get("option_type") == "call":
-                # Dealer Long Call (Assumption: Clients Sell Calls for Yield) -> +Gamma
                 gex_by_strike[strike] += gex_value
                 net_gamma += gex_value
             else:
-                # Dealer Short Put (Assumption: Clients Buy Puts for Hedge) -> -Gamma
                 gex_by_strike[strike] -= gex_value
                 net_gamma -= gex_value
                 
@@ -497,7 +676,21 @@ class DeribitOptionsAnalyzer:
         
         # 2. Identify Walls and Zero Gamma
         if not gex_by_strike:
-            return {"net_gex_usd_m": 0, "regime": "NO_DATA"}
+            return {
+                "net_gex_usd_m": 0, 
+                "regime": "NO_DATA",
+                "warnings": [f"⚠️ Aucune option après filtrage ({filtered_count}/{total_count} filtrées)"],
+                "stats": {
+                    "total_options": total_count,
+                    "filtered": filtered_count,
+                    "analyzed": 0
+                },
+                "config": {
+                    "dte_max": config.dte_max,
+                    "fridays_only": config.fridays_only,
+                    "weights": f"{config.weight_quarterly}x/{config.weight_monthly}x/{config.weight_weekly}x"
+                }
+            }
 
         sorted_strikes = sorted(gex_by_strike.items())
         
@@ -507,22 +700,76 @@ class DeribitOptionsAnalyzer:
         # Put Wall: The strike with the most NEGATIVE Gamma (Dealer Short Puts)
         put_wall = min(gex_by_strike.items(), key=lambda x: x[1])[0]
         
-        # Zero Gamma (Flip Level)
-        zero_gamma = current_price
+        # === AMÉLIORATION: Zero Gamma avec interpolation linéaire ===
+        # Focus sur une fenêtre autour du spot (±15%)
+        subset = {k: v for k, v in gex_by_strike.items() 
+                  if current_price * 0.85 < k < current_price * 1.15}
         
-        # Regime Interpretation
+        if not subset:
+            # Fallback: fenêtre plus large
+            subset = {k: v for k, v in gex_by_strike.items() 
+                      if current_price * 0.5 < k < current_price * 2.0}
+        
+        # Séparer GEX négatif et positif
+        neg_strikes = {k: v for k, v in subset.items() if v < 0}
+        pos_strikes = {k: v for k, v in subset.items() if v > 0}
+        
+        zero_gamma = current_price  # Défaut
+        
+        if neg_strikes and pos_strikes:
+            # Trouver le strike négatif le plus élevé
+            max_neg_strike = max(neg_strikes.keys())
+            neg_value = neg_strikes[max_neg_strike]
+            
+            # Trouver le strike positif le plus bas AU-DESSUS du neg
+            candidates_pos = {k: v for k, v in pos_strikes.items() if k > max_neg_strike}
+            
+            if candidates_pos:
+                min_pos_strike = min(candidates_pos.keys())
+                pos_value = candidates_pos[min_pos_strike]
+                
+                # INTERPOLATION LINÉAIRE entre les deux strikes
+                # Ratio basé sur les valeurs absolues
+                total_abs = abs(neg_value) + abs(pos_value)
+                if total_abs > 0:
+                    ratio = abs(neg_value) / total_abs
+                    zero_gamma = max_neg_strike + (min_pos_strike - max_neg_strike) * ratio
+            else:
+                # Pas de candidat positif au-dessus, prendre le strike le plus proche de 0
+                zero_gamma = min(subset.items(), key=lambda x: abs(x[1]))[0]
+        else:
+            # Fallback: strike avec GEX le plus proche de zéro
+            if subset:
+                zero_gamma = min(subset.items(), key=lambda x: abs(x[1]))[0]
+        
+        # 3. Regime Interpretation
         if net_gex_usd_m > 5:
             regime = "POSITIVE_GAMMA"
-            desc = "Dealers Long Gamma -> Volatility Suppressed"
+            desc = "Dealers Long Gamma → Volatility Suppressed"
             emoji = "🛡️"
         elif net_gex_usd_m < -5:
             regime = "NEGATIVE_GAMMA"
-            desc = "Dealers Short Gamma -> Volatility Amplified"
+            desc = "Dealers Short Gamma → Volatility Amplified"
             emoji = "☢️"
         else:
             regime = "NEUTRAL_GAMMA"
             desc = "Low Gamma Exposure"
             emoji = "⚪"
+        
+        # 4. Warnings pour quarterly manquées
+        warnings = []
+        if missed_quarterly_dtes:
+            next_missed_q = min(missed_quarterly_dtes)
+            if next_missed_q < (config.dte_max * 1.5):
+                warnings.append(
+                    f"⚠️ QUARTERLY PROCHE IGNORÉE : Dans {int(next_missed_q)} jours "
+                    f"(horizon: {config.dte_max}j). Augmentez à {int(next_missed_q + 10)}j."
+                )
+        
+        # Stats de filtrage
+        if filtered_count > 0:
+            filter_pct = (filtered_count / total_count * 100)
+            logger.debug(f"GEX: {filtered_count}/{total_count} options filtrées ({filter_pct:.1f}%)")
 
         return {
             "net_gex_usd_m": round(net_gex_usd_m, 2),
@@ -530,15 +777,25 @@ class DeribitOptionsAnalyzer:
             "regime": regime,
             "description": desc,
             "emoji": emoji,
-            "call_wall": call_wall, # Strike
-            "put_wall": put_wall, # Strike
+            "call_wall": call_wall,  # Strike
+            "put_wall": put_wall,    # Strike
             "zero_gamma": round(zero_gamma, 2),
             "key_levels": sorted(
-                [(s, v/1_000_000) for s,v in gex_by_strike.items()],
+                [(s, v/1_000_000) for s, v in gex_by_strike.items()],
                 key=lambda x: abs(x[1]), reverse=True
-            )[:5]
+            )[:5],
+            "config": {
+                "dte_max": config.dte_max,
+                "fridays_only": config.fridays_only,
+                "weights": f"{config.weight_quarterly}x/{config.weight_monthly}x/{config.weight_weekly}x"
+            },
+            "stats": {
+                "total_options": total_count,
+                "filtered": filtered_count,
+                "analyzed": total_count - filtered_count
+            },
+            "warnings": warnings
         }
-    
     def _calculate_options_score(self, max_pain: Dict, pc_ratio: Dict, 
                                   iv_analysis: Dict, gex: Dict, current_price: float) -> Dict:
         """Calcule un score global options"""
