@@ -126,7 +126,11 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     # NEW: Premium Analysis (Spot vs Perp Gap)
     from analyzers.premium import PremiumAnalyzer
     prem_analyzer = PremiumAnalyzer()
-    prem_result = prem_analyzer.analyze(aggregated_data['raw_data']['tickers'])
+    
+    # Ensure raw_data exists (fallback to empty dict if multi_exchange_data is empty)
+    raw_tickers = multi_exchange_data.get('raw_data', {}).get('tickers', {})
+    
+    prem_result = prem_analyzer.analyze(raw_tickers)
     analysis_results['indicators']['premium'] = prem_result
     print(f"   🇺🇸 Coinbase Premium: ${prem_result['gap_usd']} ({prem_result['signal']})")
     
