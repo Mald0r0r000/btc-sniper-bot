@@ -482,12 +482,12 @@ class DeribitOptionsAnalyzer:
             # GEX USD = Gamma * OI * Spot^2 / 100
             gex_value = (gamma * oi * (current_price ** 2)) / 100
             
-            if opt.get("option_type") == "put":
-                # Dealer Long Put -> +Gamma (les dealers achètent bas/vendent haut pour se couvrir)
+            if opt.get("option_type") == "call":
+                # Dealer Long Call (Assumption: Clients Sell Calls for Yield) -> +Gamma
                 gex_by_strike[strike] += gex_value
                 net_gamma += gex_value
             else:
-                # Dealer Short Call -> -Gamma (les dealers vendent bas/achètent haut)
+                # Dealer Short Put (Assumption: Clients Buy Puts for Hedge) -> -Gamma
                 gex_by_strike[strike] -= gex_value
                 net_gamma -= gex_value
                 
@@ -496,32 +496,28 @@ class DeribitOptionsAnalyzer:
         net_gex_usd_m = net_gamma / 1_000_000
         
         # 2. Identify Walls and Zero Gamma
-        # Convert defaultdict to list for sorting
         if not gex_by_strike:
             return {"net_gex_usd_m": 0, "regime": "NO_DATA"}
 
         sorted_strikes = sorted(gex_by_strike.items())
         
-        # Call Wall: The strike with the most Negative Gamma (Dealers Short Calls)
-        # We look for the minimum value (most negative)
-        call_wall = min(gex_by_strike.items(), key=lambda x: x[1])[0] 
+        # Call Wall: The strike with the most POSITIVE Gamma (Dealer Long Calls)
+        call_wall = max(gex_by_strike.items(), key=lambda x: x[1])[0] 
         
-        # Put Wall: The strike with the most Positive Gamma (Dealers Short Puts)
-        # We look for the maximum value (most positive)
-        put_wall = max(gex_by_strike.items(), key=lambda x: x[1])[0]
+        # Put Wall: The strike with the most NEGATIVE Gamma (Dealer Short Puts)
+        put_wall = min(gex_by_strike.items(), key=lambda x: x[1])[0]
         
         # Zero Gamma (Flip Level)
-        # Simple approximation: Where GEX flips from positive to negative near price
         zero_gamma = current_price
         
         # Regime Interpretation
         if net_gex_usd_m > 5:
             regime = "POSITIVE_GAMMA"
-            desc = "Stabilizing / Low Volatility (Dealers buy dips, sell rips)"
+            desc = "Dealers Long Gamma -> Volatility Suppressed"
             emoji = "🛡️"
         elif net_gex_usd_m < -5:
             regime = "NEGATIVE_GAMMA"
-            desc = "High Volatility / Acceleration (Dealers sell dips, buy rips)"
+            desc = "Dealers Short Gamma -> Volatility Amplified"
             emoji = "☢️"
         else:
             regime = "NEUTRAL_GAMMA"
