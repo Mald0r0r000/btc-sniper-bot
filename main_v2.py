@@ -127,8 +127,18 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     from analyzers.liquidation import LiquidationAnalyzer
     liq_analyzer = LiquidationAnalyzer(df_meso)
     liq_result = liq_analyzer.analyze(current_price)
-    # analysis_results['indicators']['liquidation'] = liq_result # This line was in the instruction but analysis_results is not defined here. Assuming it's a placeholder or should be removed.
-    print(f"   💀 Liquidation Heatmap: Longs @ {liq_result['nearest_long_liq']['price']} | Shorts @ {liq_result['nearest_short_liq']['price']}")
+    # analysis_results['indicators']['liquidation'] = liq_result 
+    
+    print(f"   💀 Liquidation Heatmap:")
+    if liq_result.get('total_long_liqs_est'):
+        clusters = liq_result.get('clusters_json', {}).get('longs', [])[:3]
+        cluster_str = " | ".join([f"${c['price']:,.0f} (Vol:{c['volume_score']})" for c in clusters])
+        print(f"      🟢 Longs: {cluster_str}")
+        
+    if liq_result.get('total_short_liqs_est'):
+        clusters = liq_result.get('clusters_json', {}).get('shorts', [])[:3]
+        cluster_str = " | ".join([f"${c['price']:,.0f} (Vol:{c['volume_score']})" for c in clusters])
+        print(f"      🔴 Shorts: {cluster_str}")
 
     # NEW: Premium Analysis (Spot vs Perp Gap)
     from analyzers.premium import PremiumAnalyzer
@@ -426,6 +436,8 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
             print(f"   🎰 Options: Max Pain ${mp.get('max_pain_price', 0):,.0f} | PCR {pcr.get('pcr_oi', 0):.2f}")
             if gex.get('net_gex_usd_m'):
                  print(f"      ☢️ GEX: ${gex.get('net_gex_usd_m')}M ({gex.get('regime')})")
+                 if gex.get('zero_gamma'):
+                     print(f"      🛡️ Walls: Call ${gex.get('call_wall', 0):,.0f} | Put ${gex.get('put_wall', 0):,.0f} | Zero Gamma ${gex.get('zero_gamma', 0):,.0f}")
         except Exception as e:
             print(f"   ⚠️ Options analysis failed: {e}")
         

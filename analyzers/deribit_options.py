@@ -465,71 +465,78 @@ class DeribitOptionsAnalyzer:
         """
         Calcule l'exposition Gamma (GEX) des Dealers.
         
-        Modèle:
-        - Puts: Clients vendent (DOVs, Yield) -> Dealers Long -> Gamma Positif (Sticky/Stabilisant)
-        - Calls: Clients achètent (Spec) -> Dealers Short -> Gamma Négatif (Volatile/Accélérant)
-        
-        Dealer Net Gamma = (Put Gamma * OI) - (Call Gamma * OI)
+        Formula: Gamma * OI * Spot^2 * 0.01 (Dollar Gamma per 1% move)
         """
         net_gamma = 0
         total_gamma = 0
         gex_by_strike = defaultdict(float)
         
-        # Pour estimer le Zero Gamma Level, on track le GEX cumulé par strike
-        
+        # 1. Calculate GEX per strike
         for opt in options:
             gamma = opt.get("greeks", {}).get("gamma", 0)
             oi = opt.get("open_interest", 0)
             strike = opt.get("strike", 0)
             
-            # Option Notional Value involved in Gamma
-            # GEX USD = Gamma * OI * Spot * Spot / 100 (approximation standard)
-            # Ou plus simplement en BTC: Gamma * OI
-            # On utilise souvent: Gamma * OI * Spot pour avoir l'impact notionnel en $ par 1% move
-            
-            gex_value = gamma * oi * current_price
+            # GEX en USD pour un mouvement de 1%
+            # Gamma est coin-margined (en BTC), donc conversion :
+            # GEX USD = Gamma * OI * Spot^2 / 100
+            gex_value = (gamma * oi * (current_price ** 2)) / 100
             
             if opt.get("option_type") == "put":
-                # Dealer Long Put -> +Gamma
+                # Dealer Long Put -> +Gamma (les dealers achètent bas/vendent haut pour se couvrir)
                 gex_by_strike[strike] += gex_value
                 net_gamma += gex_value
             else:
-                # Dealer Short Call -> -Gamma
+                # Dealer Short Call -> -Gamma (les dealers vendent bas/achètent haut)
                 gex_by_strike[strike] -= gex_value
                 net_gamma -= gex_value
                 
             total_gamma += abs(gex_value)
 
-        # Normaliser en $ millions
         net_gex_usd_m = net_gamma / 1_000_000
         
-        # Trouver Zero Gamma Price (approx)
-        # On regarde où le Net GEX change de signe si on bougeait le prix ?
-        # C'est complexe sans recalculer le BS. 
-        # Approximation: Regarder le strike où le GEX cumulé est proche de 0 ? Non.
-        # Approximation simple: Strike avec le plus gros "flip" ou simplement le niveau actuel.
+        # 2. Identify Walls and Zero Gamma
+        # Convert defaultdict to list for sorting
+        if not gex_by_strike:
+            return {"net_gex_usd_m": 0, "regime": "NO_DATA"}
+
+        sorted_strikes = sorted(gex_by_strike.items())
         
-        # Interprétation
+        # Call Wall: The strike with the most Negative Gamma (Dealers Short Calls)
+        # We look for the minimum value (most negative)
+        call_wall = min(gex_by_strike.items(), key=lambda x: x[1])[0] 
+        
+        # Put Wall: The strike with the most Positive Gamma (Dealers Short Puts)
+        # We look for the maximum value (most positive)
+        put_wall = max(gex_by_strike.items(), key=lambda x: x[1])[0]
+        
+        # Zero Gamma (Flip Level)
+        # Simple approximation: Where GEX flips from positive to negative near price
+        zero_gamma = current_price
+        
+        # Regime Interpretation
         if net_gex_usd_m > 5:
             regime = "POSITIVE_GAMMA"
-            desc = "Dealers Long Gamma -> Volatility Suppressed (Buy Dips/Sell Rips)"
-            emoji = "🟢" # Stability
+            desc = "Stabilizing / Low Volatility (Dealers buy dips, sell rips)"
+            emoji = "🛡️"
         elif net_gex_usd_m < -5:
             regime = "NEGATIVE_GAMMA"
-            desc = "Dealers Short Gamma -> Volatility Amplified (Chase Moves)"
-            emoji = "🔴" # Volatility
+            desc = "High Volatility / Acceleration (Dealers sell dips, buy rips)"
+            emoji = "☢️"
         else:
             regime = "NEUTRAL_GAMMA"
             desc = "Low Gamma Exposure"
             emoji = "⚪"
-            
+
         return {
             "net_gex_usd_m": round(net_gex_usd_m, 2),
             "total_gamma_usd_m": round(total_gamma / 1_000_000, 2),
             "regime": regime,
             "description": desc,
             "emoji": emoji,
-            # Top strikes by Abs GEX impact
+            "call_wall": call_wall, # Strike
+            "put_wall": put_wall, # Strike
+            "zero_gamma": round(zero_gamma, 2),
             "key_levels": sorted(
                 [(s, v/1_000_000) for s,v in gex_by_strike.items()],
                 key=lambda x: abs(x[1]), reverse=True
