@@ -154,10 +154,10 @@ class DecisionEngineV2:
     # Intraday 1H-2D - Optimisé (Post-Backtest 2026 - 9% Fund Update)
     # Findings: Tech/Derivs heavy. Fund reduced to 3% each to unlock Shorts while keeping Longs > 54.5.
     'intraday_1h_2d': {
-        'technical': 38,        # +3
-        'structure': 15,        
+        'technical': 41,        # +3 (41%) - Flow is King
+        'structure': 20,        # +5 (20%) - Focus on MTF Trend/Quantum
         'multi_exchange': 10,   
-        'derivatives': 28,      # +3
+        'derivatives': 20,      # -8 (20%) - Reduce noise from liq magnets
         'onchain': 3,           # -2 (3%)
         'sentiment': 3,         # -2 (3%)
         'macro': 3              # -2 (3%)
