@@ -151,6 +151,7 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 "vpc": market_ctx.get("vp_context"),
                 "mr": market_ctx.get("manipulation_risk"),
                 "fg": market_ctx.get("fear_greed"),
+                "re": (indicators.get("macro") or {}).get("risk_environment", {}).get("environment"), # ADDED: Risk Env
                 "tb": market_ctx.get("technical_bias"),
                 "sb": market_ctx.get("structure_bias"),
                 "db": market_ctx.get("derivatives_bias"),
