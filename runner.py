@@ -262,6 +262,7 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 "reg": adx_data.get("regime"),  # ADX regime (TRENDING/RANGING/TRANSITION)
                 "atd": adx_data.get("trend_direction"),  # ADX trend direction (BULLISH/BEARISH/NEUTRAL)
                 "dip": adx_data.get("plus_di"),  # DI+ value
+                "dip": adx_data.get("plus_di"),  # DI+ value
                 "dim": adx_data.get("minus_di"),  # DI- value
                 # MACD 3D data (extracted from mtf_data['3d'])
                 "mcd": {
@@ -271,6 +272,10 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                     "t": macd_data.get("mtf_data", {}).get("3d", {}).get("trend")  # MACD trend (BULLISH/BEARISH/NEUTRAL)
                 } if macd_data.get("available") and macd_data.get("mtf_data", {}).get("3d", {}).get("available") else None
             },
+            # Institutional Data
+            "gex": indicators.get("derivatives", {}).get("gex_profile", {}), # Phase 1
+            "liq": indicators.get("liquidation", {}), # Phase 2
+            
             # Hyperliquid whale data (enhanced with two-tier tracking)
             "hl": {
                 "ws": indicators.get("hyperliquid", {}).get("whale_analysis", {}).get("sentiment"),

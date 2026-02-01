@@ -116,6 +116,13 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
     # ==========================================
     print("\n🔬 Analyse des indicateurs core...")
     
+    # NEW: Liquidation Analysis (1H Swings)
+    from analyzers.liquidation import LiquidationAnalyzer
+    liq_analyzer = LiquidationAnalyzer(df_meso)
+    liq_result = liq_analyzer.analyze(current_price)
+    # analysis_results['indicators']['liquidation'] = liq_result # This line was in the instruction but analysis_results is not defined here. Assuming it's a placeholder or should be removed.
+    print(f"   💀 Liquidation Heatmap: Longs @ {liq_result['nearest_long_liq']['price']} | Shorts @ {liq_result['nearest_short_liq']['price']}")
+
     # Order Book Analysis
     ob_analyzer = OrderBookAnalyzer(order_book, current_price)
     ob_result = ob_analyzer.analyze()

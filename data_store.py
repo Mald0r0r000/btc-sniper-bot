@@ -57,6 +57,11 @@ class GoogleSheetDataStore:
         "Tech_KDJ_J", "Tech_KDJ_Signal", # ADDED: Signal
         "Tech_ADX", "Tech_ADX_Trend", 
         "Tech_DI_Plus", "Tech_DI_Minus",
+        # --- Institutional (GEX & Liq) ---
+        "Inst_GEX_Net_USD_M", "Inst_GEX_Regime", # GEX
+        "Inst_Liq_Long_Price", "Inst_Liq_Long_Dist", "Inst_Liq_Long_Int", # Liquidation Long
+        "Inst_Liq_Short_Price", "Inst_Liq_Short_Dist", "Inst_Liq_Short_Int", # Liquidation Short
+        
         "MACD_3D_Trend", "MACD_3D_Slope", 
         "MACD_1D_Trend", "MACD_1D_Slope",
         "MTF_MACD_Composite", "MTF_Divergence_Type",
@@ -194,6 +199,12 @@ class GoogleSheetDataStore:
             tech.get("kj"), tech.get("ks"), # ADDED: Signal
             tech.get("adx"), tech.get("atd"), 
             tech.get("dip"), tech.get("dim"),
+            
+            # --- Institutional ---
+            s.get("gex", {}).get("net_gex_usd_m"), s.get("gex", {}).get("regime"),
+            s.get("liq", {}).get("nearest_long_liq", {}).get("price"), s.get("liq", {}).get("nearest_long_liq", {}).get("distance_pct"), s.get("liq", {}).get("nearest_long_liq", {}).get("intensity"),
+            s.get("liq", {}).get("nearest_short_liq", {}).get("price"), s.get("liq", {}).get("nearest_short_liq", {}).get("distance_pct"), s.get("liq", {}).get("nearest_short_liq", {}).get("intensity"),
+            
             # MACD Precision
             mtf.get("tf", {}).get("3d", {}).get("t"), mtf.get("tf", {}).get("3d", {}).get("sl"), 
             mtf.get("tf", {}).get("1d", {}).get("t"), mtf.get("tf", {}).get("1d", {}).get("sl"), 
