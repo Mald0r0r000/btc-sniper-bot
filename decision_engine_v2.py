@@ -1082,18 +1082,38 @@ class DecisionEngineV2:
         # Signaux contrarian (sentiment extrême)
         fg_value = self.sentiment.get('fear_greed', {}).get('value', 50)
         
-        # MACD 3D Filter (Major Trend Protection)
-        macd_3d_trend = self.macd.get('available', False) and \
-                       self.macd.get('timeframes', {}).get('3d', {}).get('trend', 'NEUTRAL')
+        # MACD 3D & 1D Filter (Slope & Delta Analysis)
+        macd_available = self.macd.get('available', False)
+        
+        # 3D Metrics
+        macd_3d = self.macd.get('timeframes', {}).get('3d', {})
+        slope_3d = macd_3d.get('slope', 0)
+        trend_3d = macd_3d.get('trend', 'NEUTRAL')
+        
+        # 1D Metrics
+        macd_1d = self.macd.get('timeframes', {}).get('1d', {})
+        slope_1d = macd_1d.get('slope', 0)
         
         if fg_value < 20:
-            # ONLY Enable Contrarian Buy if MACD 3D is NOT Bearish
-            if macd_3d_trend != 'BEARISH':
+            # CONTRARIAN BUY FILTER
+            # 1. 3D Trend Protection: If Bearish, we need positive slope (Deceleration)
+            if trend_3d == 'BEARISH' and slope_3d < 0:
+                pass # Block: Trend is Bearish AND Accelerating (Falling Knife)
+            # 2. 1D Momentum: Must not be accelerating downwards
+            elif slope_1d < -50: # Strong bearish acceleration daily
+                pass # Block
+            else:
                 return SignalType.CONTRARIAN_BUY
                 
         if fg_value > 80:
-            # ONLY Enable Contrarian Sell if MACD 3D is NOT Bullish
-            if macd_3d_trend != 'BULLISH':
+            # CONTRARIAN SELL FILTER
+            # 1. 3D Trend Protection: If Bullish, we need negative slope (Deceleration)
+            if trend_3d == 'BULLISH' and slope_3d > 0:
+                pass # Block: Trend is Bullish AND Accelerating (Rocket)
+            # 2. 1D Momentum: Must not be accelerating upwards
+            elif slope_1d > 50:
+                pass # Block
+            else:
                 return SignalType.CONTRARIAN_SELL
         
         # Signaux macro-alignés
