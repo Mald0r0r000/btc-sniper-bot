@@ -597,10 +597,17 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
                 'arbitrage': multi_exchange_data.get('arbitrage')
             } if multi_exchange_data else None,
             'spoofing': spoofing_result if spoofing_result else None,
+            
+            # --- INSTITUTIONAL DATA ---
             'derivatives': {
                 'sentiment': derivatives_result.get('sentiment'),
-                'liquidations': derivatives_result.get('liquidations', {}).get('magnet')
+                'liquidations': derivatives_result.get('liquidations', {}).get('magnet'),
+                'gex_profile': options_result.get('gex_profile') if options_result else None # ADDED: GEX
             } if derivatives_result else None,
+            
+            'liquidation': liq_result if 'liq_result' in locals() else None, # ADDED: Liquidation Phase 2
+            'premium': prem_result if 'prem_result' in locals() else None, # ADDED: Premium Phase 3
+            
             'onchain': onchain_result.get('score') if onchain_result else None,
             'sentiment': {
                 'fear_greed': sentiment_result.get('fear_greed'),
