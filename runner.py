@@ -367,7 +367,8 @@ def run_scheduled_analysis() -> Dict[str, Any]:
         if telegram_enabled and confidence >= confidence_threshold and is_quality_signal:
             print(f"\n📱 Envoi notification Telegram ({signal_type}, {confidence:.0f}%)...")
             # Récupérer l'historique pour le compteur de signaux consécutifs
-            signal_history = data_store.read_signals()[-20:]  # 20 derniers signaux
+            raw_history = data_store.read_signals()
+            signal_history = raw_history[-20:] if raw_history else []  # 20 derniers signaux
             # Récupérer les stats de performance (winrate)
             winrate_stats = data_store.get_performance_stats()
             if notifier.send_signal_alert(report, signal_history=signal_history, winrate_stats=winrate_stats):
@@ -443,6 +444,11 @@ def run_validation_cycle(data_store: GistDataStore) -> Dict[str, Any]:
     
     # Récupérer les signaux non-validés
     signals = data_store.read_signals()
+    
+    if signals is None:
+        print("⚠️ Impossible de lire les signaux pour validation (Gist error)")
+        return {'validated': 0, 'error': 'Gist Read Error'}
+        
     pending = [s for s in signals if s.get('validation', {}).get('status') not in ['WIN', 'LOSS', 'EXPIRED']]
     
     print(f"⏳ {len(pending)} signaux à valider")
