@@ -232,6 +232,11 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 "d1h": (indicators.get("open_interest") or {}).get("delta", {}).get("1h", {}).get("delta_oi_pct"),
                 "d24h": (indicators.get("open_interest") or {}).get("delta", {}).get("24h", {}).get("delta_oi_pct")
             },
+            "str": { # Structure details (NEW)
+                "fvg_d": (indicators.get("fvg") or {}).get("nearest_bull", {}).get("distance_pct") 
+                         if (indicators.get("fvg") or {}).get("nearest_bull") 
+                         else (indicators.get("fvg") or {}).get("nearest_bear", {}).get("distance_pct") 
+            },
             "macro": {  # cross-asset & macro
                 "fg": (indicators.get("sentiment") or {}).get("fear_greed", {}).get("value"),  # fear_greed index
                 "re": (indicators.get("macro") or {}).get("risk_environment", {}).get("environment"),  # risk env
@@ -303,10 +308,15 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                         "s": macd_data.get("mtf_data", {}).get("1d", {}).get("slope")
                     } if macd_data.get("mtf_data", {}).get("1d", {}).get("available") else None,
                     "3d": {
-                        "t": macd_data.get("mtf_data", {}).get("3d", {}).get("trend"),
-                        "h": macd_data.get("mtf_data", {}).get("3d", {}).get("hist"),
-                        "s": macd_data.get("mtf_data", {}).get("3d", {}).get("slope")
-                    } if macd_data.get("mtf_data", {}).get("3d", {}).get("available") else None
+                    "t": macd_data.get("mtf_data", {}).get("3d", {}).get("trend"),  # MACD trend
+                    "sl": macd_data.get("mtf_data", {}).get("3d", {}).get("slope")   # MACD slope (NEW)
+                } if macd_data.get("available") and macd_data.get("mtf_data", {}).get("3d", {}).get("available") else None,
+                # MACD 1D data (extracted from mtf_data['1d']) - NEW
+                "mcd_1d": {
+                    "h": macd_data.get("mtf_data", {}).get("1d", {}).get("hist"),
+                    "t": macd_data.get("mtf_data", {}).get("1d", {}).get("trend"),
+                    "sl": macd_data.get("mtf_data", {}).get("1d", {}).get("slope")
+                } if macd_data.get("available") and macd_data.get("mtf_data", {}).get("1d", {}).get("available") else None
                 } if macd_data.get("mtf_data") else None
             } if macd_data.get("available") else None,
             # Smart Entry recommendation (fractal zones + MTF context)

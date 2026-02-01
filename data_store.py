@@ -45,14 +45,19 @@ class GoogleSheetDataStore:
         "OB_Bid_Ratio", "OB_Pressure", "OB_Imbalance",
         
         # --- CVD Multi-Timeframe ---
-        "CVD_Score_Composite", "CVD_Trend", "CVD_Aggression",
+        "CVD_Score_Composite", "CVD_Trend", "CVD_Aggression", "CVD_Confluence",
         "CVD_5m_Net", "CVD_5m_Score", "CVD_5m_Aggression",
         "CVD_1h_Net", "CVD_1h_Score",
         "CVD_4h_Net", "CVD_4h_Score",
         
         # --- Technicals ---
-        "Tech_KDJ_J", "Tech_ADX", "Tech_ADX_Trend", "Tech_MACD_Trend",
+        "Tech_KDJ_J", "Tech_ADX", "Tech_ADX_Trend", 
+        "MACD_3D_Trend", "MACD_3D_Slope", 
+        "MACD_1D_Trend", "MACD_1D_Slope",
         "MTF_MACD_Composite", "MTF_Divergence_Type",
+        
+        # --- Structure ---
+        "Struct_FVG_Dist",
         
         # --- OI ---
         "OI_Total", "OI_Delta_1h"
@@ -168,14 +173,21 @@ class GoogleSheetDataStore:
             ob.get("br"), ob.get("pr"), ob.get("im"),
             
             # --- CVD ---
-            cvd.get("cs"), cvd.get("tr"), cvd.get("ag"),
+            cvd.get("cs"), cvd.get("tr"), cvd.get("ag"), cvd.get("cf"), # Added Confluence
             cvd_mtf.get("5m", {}).get("nc"), cvd_mtf.get("5m", {}).get("sc"), cvd_mtf.get("5m", {}).get("ar"),
             cvd_mtf.get("1h", {}).get("nc"), cvd_mtf.get("1h", {}).get("sc"),
             cvd_mtf.get("4h", {}).get("nc"), cvd_mtf.get("4h", {}).get("sc"),
             
             # --- Tech ---
-            tech.get("kj"), tech.get("adx"), tech.get("atd"), tech.get("mcd", {}).get("t"),
+            tech.get("kj"), tech.get("adx"), tech.get("atd"), 
+            # MACD Precision
+            mtf.get("tf", {}).get("3d", {}).get("t"), mtf.get("tf", {}).get("3d", {}).get("sl"), # 3D Trend/Slope
+            mtf.get("tf", {}).get("1d", {}).get("t"), mtf.get("tf", {}).get("1d", {}).get("sl"), # 1D Trend/Slope
+            
             mtf.get("cs"), (mtf.get("dv") or {}).get("t", "NONE"),
+            
+            # --- Structure ---
+            s.get("str", {}).get("fvg_d"), # FVG Distance
             
             # --- OI ---
             oi.get("t"), oi.get("d1h")
