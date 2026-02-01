@@ -37,31 +37,39 @@ class GoogleSheetDataStore:
         
         # --- Fluid Dynamics ---
         "Fluid_Venturi_Score", "Fluid_Compression_Detected", "Fluid_Direction", "Fluid_Breakout_Prob",
+        "Fluid_ST_Detected", "Fluid_ST_Prob", # ADDED: Self-Trading
         
         # --- Hyperliquid Whales ---
-        "HL_Whale_Sentiment", "HL_Long_Ratio", "HL_Whale_Count", "HL_Weighted_Long", "HL_Weighted_Short",
+        "HL_Whale_Sentiment", "HL_Long_Ratio", "HL_Whale_Count", "HL_Curated_Count", "HL_Leaderboard_Count", # ADDED: Counts
+        "HL_Weighted_Long", "HL_Weighted_Short",
         
         # --- Order Book ---
-        "OB_Bid_Ratio", "OB_Pressure", "OB_Imbalance",
+        "OB_Bid_Ratio", "OB_Pressure", "OB_Imbalance", "OB_Spread_Bps", # ADDED: Spread
         
         # --- CVD Multi-Timeframe ---
         "CVD_Score_Composite", "CVD_Trend", "CVD_Aggression", "CVD_Confluence",
         "CVD_5m_Net", "CVD_5m_Score", "CVD_5m_Aggression",
         "CVD_1h_Net", "CVD_1h_Score",
         "CVD_4h_Net", "CVD_4h_Score",
+        "CVD_1d_Net", "CVD_1d_Score", # ADDED: 1D CVD
         
         # --- Technicals ---
-        "Tech_KDJ_J", "Tech_ADX", "Tech_ADX_Trend", 
-        "Tech_DI_Plus", "Tech_DI_Minus", # ADDED: Raw DI values
+        "Tech_KDJ_J", "Tech_KDJ_Signal", # ADDED: Signal
+        "Tech_ADX", "Tech_ADX_Trend", 
+        "Tech_DI_Plus", "Tech_DI_Minus",
         "MACD_3D_Trend", "MACD_3D_Slope", 
         "MACD_1D_Trend", "MACD_1D_Slope",
         "MTF_MACD_Composite", "MTF_Divergence_Type",
         
-        # --- Structure ---
+        # --- Structure & Volume Profile ---
         "Struct_FVG_Dist",
+        "VP_POC", "VP_VAH", "VP_VAL", "VP_Regime", # ADDED: VP Levels
         
         # --- OI ---
-        "OI_Total", "OI_Delta_1h"
+        "OI_Total", "OI_Delta_1h", "OI_Delta_24h", # ADDED: 24h
+        
+        # --- Macro Raw ---
+        "Macro_DXY", "Macro_SPX", "Macro_M2" # ADDED: Macro Raw
     ]
 
     def __init__(self, sheet_id: str = None, credentials_json: str = None):
@@ -166,33 +174,41 @@ class GoogleSheetDataStore:
             
             # --- Fluid ---
             fd_v.get("cs"), fd_v.get("cd"), fd_v.get("dir"), fd_v.get("bp"),
+            fd.get("st", {}).get("det"), fd.get("st", {}).get("pb"), # ADDED: ST
             
             # --- Hyperliquid ---
-            hl.get("ws"), hl.get("lr"), hl.get("wc"), hl.get("wl"), hl.get("wsh"),
+            hl.get("ws"), hl.get("lr"), hl.get("wc"), hl.get("cc"), hl.get("lc"), # ADDED: Counts
+            hl.get("wl"), hl.get("wsh"),
             
             # --- OB ---
-            ob.get("br"), ob.get("pr"), ob.get("im"),
+            ob.get("br"), ob.get("pr"), ob.get("im"), ob.get("sp"), # ADDED: Spread
             
             # --- CVD ---
-            cvd.get("cs"), cvd.get("tr"), cvd.get("ag"), cvd.get("cf"), # Added Confluence
+            cvd.get("cs"), cvd.get("tr"), cvd.get("ag"), cvd.get("cf"),
             cvd_mtf.get("5m", {}).get("nc"), cvd_mtf.get("5m", {}).get("sc"), cvd_mtf.get("5m", {}).get("ar"),
             cvd_mtf.get("1h", {}).get("nc"), cvd_mtf.get("1h", {}).get("sc"),
             cvd_mtf.get("4h", {}).get("nc"), cvd_mtf.get("4h", {}).get("sc"),
+            cvd_mtf.get("1d", {}).get("nc"), cvd_mtf.get("1d", {}).get("sc"), # ADDED: 1D
             
             # --- Tech ---
-            tech.get("kj"), tech.get("adx"), tech.get("atd"), 
-            tech.get("dip"), tech.get("dim"), # ADDED: Raw DI values
+            tech.get("kj"), tech.get("ks"), # ADDED: Signal
+            tech.get("adx"), tech.get("atd"), 
+            tech.get("dip"), tech.get("dim"),
             # MACD Precision
-            mtf.get("tf", {}).get("3d", {}).get("t"), mtf.get("tf", {}).get("3d", {}).get("sl"), # 3D Trend/Slope
-            mtf.get("tf", {}).get("1d", {}).get("t"), mtf.get("tf", {}).get("1d", {}).get("sl"), # 1D Trend/Slope
+            mtf.get("tf", {}).get("3d", {}).get("t"), mtf.get("tf", {}).get("3d", {}).get("sl"), 
+            mtf.get("tf", {}).get("1d", {}).get("t"), mtf.get("tf", {}).get("1d", {}).get("sl"), 
             
             mtf.get("cs"), (mtf.get("dv") or {}).get("t", "NONE"),
             
             # --- Structure ---
-            s.get("str", {}).get("fvg_d"), # FVG Distance
+            s.get("str", {}).get("fvg_d"),
+            s.get("vp", {}).get("poc"), s.get("vp", {}).get("vah"), s.get("vp", {}).get("val"), s.get("vp", {}).get("reg"), # ADDED: VP
             
             # --- OI ---
-            oi.get("t"), oi.get("d1h")
+            oi.get("t"), oi.get("d1h"), oi.get("d24h"), # ADDED: 24h
+            
+            # --- Macro Raw ---
+            s.get("macro", {}).get("dxy"), s.get("macro", {}).get("spx"), s.get("macro", {}).get("m2", {}).get("v") # ADDED: Macro Raw
         ]
 
     def save_signal(self, signal_record: Dict[str, Any]) -> bool:
