@@ -12,20 +12,31 @@ class PremiumAnalyzer:
     def __init__(self):
         pass
         
-    def analyze(self, tickers: Dict[str, Dict]) -> Dict[str, Any]:
+    def analyze(self, tickers: Dict[str, Dict], 
+                spot_price_override: float = None,
+                perp_price_override: float = None) -> Dict[str, Any]:
         """
         Calculs le Premium Gap.
         
         Args:
             tickers: Dict of tickers from ExchangeAggregator
-                     Format: {'exchange_id': {'last': 100, ...}, ...}
+            spot_price_override: Forced price for Spot (e.g. from OHLCV)
+            perp_price_override: Forced price for Perp (e.g. from OHLCV)
         """
         # 1. Identify Spot Reference (Coinbase > Kraken > Bybit Spot)
         spot_ref = self._get_price(tickers, ['coinbase', 'kraken', 'bybit'])
         
+        # Override if needed
+        if spot_price_override:
+            spot_ref = {"exchange": "OVERRIDE", "price": spot_price_override}
+            
         # 2. Identify Perp Reference (Binance > Bitget > Bybit Perp)
         perp_ref = self._get_price(tickers, ['binance', 'bitget', 'bybit', 'okx'])
         
+        # Override if needed
+        if perp_price_override:
+            perp_ref = {"exchange": "OVERRIDE", "price": perp_price_override}
+            
         if not spot_ref['price'] or not perp_ref['price']:
             return self._empty_result()
             

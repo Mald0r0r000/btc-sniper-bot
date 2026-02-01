@@ -437,6 +437,38 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
                 spot_perp_results = spot_perp_analyzer.analyze(global_cvd_data)
                 
                 print(f"   📊 Spot/Perp Divergence (1h): {spot_perp_results.get('1h', {}).get('regime', 'N/A')}")
+                
+                # RETRY PREMIUM ANALYSIS IF FAILED (using 1h close prices)
+                if not prem_result or prem_result.get('signal') == 'NO_DATA':
+                    print("   🔄 Retrying Premium Analysis with OHLCV data...")
+                    
+                    # Extract last close prices from global_cvd_data DataFrames
+                    spot_override = None
+                    perp_override = None
+                    
+                    # Coinbase Spot
+                    if 'coinbase:spot' in global_cvd_data.get('1h', {}):
+                        df_cb = global_cvd_data['1h']['coinbase:spot']
+                        if not df_cb.empty:
+                            spot_override = df_cb.iloc[-1]['close']
+                            
+                    # Binance/Bitget Swap for Perp
+                    if 'binance:swap' in global_cvd_data.get('1h', {}):
+                        df_perp = global_cvd_data['1h']['binance:swap']
+                        if not df_perp.empty:
+                            perp_override = df_perp.iloc[-1]['close']
+                    elif 'bitget:swap' in global_cvd_data.get('1h', {}):
+                        df_perp = global_cvd_data['1h']['bitget:swap']
+                        if not df_perp.empty:
+                            perp_override = df_perp.iloc[-1]['close']
+                            
+                    if spot_override and perp_override:
+                        prem_result = prem_analyzer.analyze({}, spot_price_override=spot_override, perp_price_override=perp_override)
+                        analysis_results['indicators']['premium'] = prem_result # Update global results
+                        print(f"   🇺🇸 Coinbase Premium (RECOVERED): ${prem_result['gap_usd']} ({prem_result['signal']})")
+                    else:
+                        print("   ❌ Premium Recovery Failed: Missing specific OHLCV data")
+                        
             else:
                 print("   ⚠️ Multi-exchange aggregator not available for Spot/Perp analysis.")
         except Exception as e:
