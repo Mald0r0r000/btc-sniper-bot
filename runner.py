@@ -295,17 +295,17 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                     "1h": {
                         "t": macd_data.get("mtf_data", {}).get("1h", {}).get("trend"),
                         "h": macd_data.get("mtf_data", {}).get("1h", {}).get("hist"),
-                        "s": macd_data.get("mtf_data", {}).get("1h", {}).get("slope")
+                        "sl": macd_data.get("mtf_data", {}).get("1h", {}).get("slope")
                     } if macd_data.get("mtf_data", {}).get("1h", {}).get("available") else None,
                     "4h": {
                         "t": macd_data.get("mtf_data", {}).get("4h", {}).get("trend"),
                         "h": macd_data.get("mtf_data", {}).get("4h", {}).get("hist"),
-                        "s": macd_data.get("mtf_data", {}).get("4h", {}).get("slope")
+                        "sl": macd_data.get("mtf_data", {}).get("4h", {}).get("slope")
                     } if macd_data.get("mtf_data", {}).get("4h", {}).get("available") else None,
                     "1d": {
                         "t": macd_data.get("mtf_data", {}).get("1d", {}).get("trend"),
                         "h": macd_data.get("mtf_data", {}).get("1d", {}).get("hist"),
-                        "s": macd_data.get("mtf_data", {}).get("1d", {}).get("slope")
+                        "sl": macd_data.get("mtf_data", {}).get("1d", {}).get("slope")
                     } if macd_data.get("mtf_data", {}).get("1d", {}).get("available") else None,
                     "3d": {
                     "t": macd_data.get("mtf_data", {}).get("3d", {}).get("trend"),  # MACD trend
