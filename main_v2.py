@@ -412,11 +412,20 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         
         # Options Deribit Analysis
         try:
-            options_analyzer = OptionsAnalyzer()
+            # Note: DeribitOptionsAnalyzer in deribit_options.py uses a wrapper named OptionsAnalyzer
+            # to maintain backward compatibility but with real data.
+            # We ensure we import it from the correct file.
+            from analyzers.deribit_options import OptionsAnalyzer as RealOptionsAnalyzer
+            
+            options_analyzer = RealOptionsAnalyzer()
             options_result = options_analyzer.analyze(current_price)
             mp = options_result.get('max_pain', {})
             pcr = options_result.get('put_call_ratio', {})
-            print(f"   🎰 Options: Max Pain ${mp.get('max_pain_price', 0):,.0f} | PCR {pcr.get('pcr_oi', 0):.2f} {pcr.get('emoji', '')}")
+            gex = options_result.get('gex_profile', {})
+            
+            print(f"   🎰 Options: Max Pain ${mp.get('max_pain_price', 0):,.0f} | PCR {pcr.get('pcr_oi', 0):.2f}")
+            if gex.get('net_gex_usd_m'):
+                 print(f"      ☢️ GEX: ${gex.get('net_gex_usd_m')}M ({gex.get('regime')})")
         except Exception as e:
             print(f"   ⚠️ Options analysis failed: {e}")
         
