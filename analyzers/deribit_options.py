@@ -452,6 +452,13 @@ class DeribitOptionsAnalyzer:
         # Temps restant
         time_to_expiry_hours = (nearest_ts - now) / (1000 * 3600)
         
+        return {
+            "expiry": nearest_expiry,
+            "hours_to_expiry": round(time_to_expiry_hours, 1),
+            "call_oi": round(call_oi, 2),
+            "put_oi": round(put_oi, 2),
+            "pcr": round(put_oi / call_oi, 3) if call_oi > 0 else 0,
+            "options_count": len(expiry_opts)
         }
     
     def _calculate_gex_profile(self, options: List[Dict], current_price: float) -> Dict:
