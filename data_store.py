@@ -253,6 +253,10 @@ class GoogleSheetDataStore:
                 else:
                     clean_row.append(str(item)) # Convert everything to string for safety initially
             
+            # DEBUG: Trace OI values
+            if len(row_data) > 81:
+                print(f"   📊 OI Check - 1H: {row_data[80]} | 24H: {row_data[81]} (Indices 80/81)")
+            
             print(f"📤 Appending row with {len(clean_row)} columns...")
             sheet.append_row(clean_row)
             print(f"📊 Signal SUCCESSFULLY recorded in Google Sheet (Row {len(sheet.col_values(1))})")
@@ -631,9 +635,11 @@ class GistDataStore:
                     print(f"   📈 Historique OI chargé depuis Gist ({len(history_data)} points)")
                     return history_data
                 else:
-                    return None
+                    print(f"   ℹ️ Fichier {self.OI_HISTORY_FILENAME} inexistant dans le Gist (Nouveau)")
+                    return [] # Return empty list to indicate "Safe to start new"
             else:
-                return None
+                print(f"⚠️ Erreur lecture Gist (HTTP {response.status_code}): {response.text[:100]}")
+                return None # Return None to indicate "Error, do not overwrite"
                 
         except Exception as e:
             print(f"⚠️ Erreur chargement OI: {e}")

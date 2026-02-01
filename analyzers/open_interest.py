@@ -33,6 +33,7 @@ class OpenInterestAnalyzer:
         except ImportError:
             self.gist_store = None
             
+        self.disable_gist_save = False # Safety flag
         self.history = self._load_history()
     
     def _load_history(self) -> deque:
@@ -40,13 +41,23 @@ class OpenInterestAnalyzer:
         # 1. Try Gist first (Source of Truth for persistence)
         if self.gist_store:
             gist_data = self.gist_store.load_oi_history()
-            if gist_data:
-                # Validation du Gist data (même logique de reset)
-                if gist_data and gist_data[-1].get('total_oi', 0) > 1000000:
-                   print("⚠️ OI History (Gist) corrupted/unnormalized. Resetting.")
-                   return deque(maxlen=self.MAX_HISTORY)
-                   
-                return deque(gist_data, maxlen=self.MAX_HISTORY)
+            
+            if gist_data is None:
+                print("🚨 CRITICAL: Failed to load OI History from Gist (Error). Disabling Gist Save to prevent data loss.")
+                self.disable_gist_save = True
+            else:
+                # gist_data is List (empty or not), which means load was successful (or file missing safe)
+                self.disable_gist_save = False
+                
+                if gist_data:
+                    # Validation du Gist data (même logique de reset)
+                    if gist_data[-1].get('total_oi', 0) > 1000000:
+                       print("⚠️ OI History (Gist) corrupted/unnormalized. Resetting.")
+                       return deque(maxlen=self.MAX_HISTORY)
+                       
+                    return deque(gist_data, maxlen=self.MAX_HISTORY)
+                else:
+                    return deque(maxlen=self.MAX_HISTORY)
 
         # 2. Fallback to local file
         try:
@@ -77,7 +88,10 @@ class OpenInterestAnalyzer:
             
         # 2. Save to Gist
         if self.gist_store:
-            self.gist_store.save_oi_history(history_list)
+            if self.disable_gist_save:
+                print("⚠️ Skipping Gist Save (Safety Mode Active)")
+            else:
+                self.gist_store.save_oi_history(history_list)
     
     def analyze(self, current_price: float, 
                 open_interests: Dict[str, float],
