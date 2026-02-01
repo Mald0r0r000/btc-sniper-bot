@@ -254,21 +254,37 @@ class MultiExchangeAggregator:
             exchanges: Liste des exchanges à utiliser. 
                       Par défaut: 8 exchanges (majeurs + fallback US-friendly)
         """
+    # Master Lists
+    SPOT_MASTERS = [
+        'bybit', 'bitget', 'gateio', 'mexc', 
+        'kraken', 'coinbase', 'kucoin', 'huobi', 'binance', 'okx'
+    ]
+    PERP_MASTERS = [
+        'bybit', 'bitget', 'gateio', 'mexc', 'kraken',
+        'hyperliquid', 'huobi', 'binance', 'okx'
+    ]
+
+    def __init__(self, exchanges: List[str] = None):
+        """
+        Args:
+            exchanges: Liste des exchanges à utiliser. 
+                      Par défaut: None (utilise tous les masters sauf géobloqués)
+        """
         if exchanges is None:
-            # Full list based on user request (excluding blocked ones)
-            # Spot Exchanges
-            self.spot_list = [
-                'bybit', 'bitget', 'gateio', 'mexc', 
-                'kraken', 'coinbase', 'kucoin', 'huobi'
-            ]
-            # Perp Exchanges
-            self.perp_list = [
-                'bybit', 'bitget', 'gateio', 'mexc', 'kraken',
-                'hyperliquid', 'huobi'
-            ]
-            # (Note: Binance/OKX excluded to avoid geoblocking issues)
-            
-            exchanges = list(set(self.spot_list + self.perp_list))
+            # Full list based on master lists
+            exchanges = list(set(self.SPOT_MASTERS + self.PERP_MASTERS))
+        
+        self.requested_exchanges = exchanges
+        self.exchanges = {} # Stores connection objects: "exchange_id:market_type" -> Connection
+        self.failed_exchanges = {}
+        self.dynamic_weights = {}
+        
+        # Populate spot_list and perp_list based on requested exchanges
+        self.spot_list = [ex for ex in exchanges if ex in self.SPOT_MASTERS]
+        self.perp_list = [ex for ex in exchanges if ex in self.PERP_MASTERS]
+        
+        # (Note: Binance/OKX excluded to avoid geoblocking issues if desired, 
+        # but here we allow them if requested explicitly)
         
         self.requested_exchanges = exchanges
         self.exchanges = {} # Stores connection objects: "exchange_id:market_type" -> Connection

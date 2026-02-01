@@ -24,14 +24,14 @@ class PremiumAnalyzer:
             perp_price_override: Forced price for Perp (e.g. from OHLCV)
         """
         # 1. Identify Spot Reference (Coinbase > Kraken > Bybit Spot)
-        spot_ref = self._get_price(tickers, ['coinbase', 'kraken', 'bybit'])
+        spot_ref = self._get_price(tickers, ['coinbase', 'kraken', 'bybit'], suffixes=[':spot', ''])
         
         # Override if needed
         if spot_price_override:
             spot_ref = {"exchange": "OVERRIDE", "price": spot_price_override}
             
         # 2. Identify Perp Reference (Binance > Bitget > Bybit Perp)
-        perp_ref = self._get_price(tickers, ['binance', 'bitget', 'bybit', 'okx'])
+        perp_ref = self._get_price(tickers, ['binance', 'bitget', 'bybit', 'okx'], suffixes=[':swap', ':future'])
         
         # Override if needed
         if perp_price_override:
@@ -64,14 +64,25 @@ class PremiumAnalyzer:
             "valid": True
         }
     
-    def _get_price(self, tickers: Dict[str, Dict], priority_list: List[str]) -> Dict[str, Any]:
-        """Tries to find the first available price from the priority list"""
+    def _get_price(self, tickers: Dict[str, Dict], priority_list: List[str], suffixes: List[str] = None) -> Dict[str, Any]:
+        """Tries to find the first available price from the priority list with specific suffixes"""
+        if suffixes is None:
+            suffixes = ['']
+            
         for ex in priority_list:
-            if ex in tickers and tickers[ex].get('success') and tickers[ex].get('last', 0) > 0:
-                return {
-                    "exchange": ex,
-                    "price": tickers[ex]['last']
-                }
+            # Check for suffixes (e.g. coinbase:spot)
+            for suffix in suffixes:
+                # Handle empty suffix case
+                if suffix == '':
+                    key = ex
+                else:
+                    key = f"{ex}{suffix}"
+                    
+                if key in tickers and tickers[key].get('success') and tickers[key].get('last', 0) > 0:
+                     return {
+                        "exchange": key,
+                        "price": tickers[key]['last']
+                    }
         return {"exchange": None, "price": 0}
 
     def _empty_result(self):
