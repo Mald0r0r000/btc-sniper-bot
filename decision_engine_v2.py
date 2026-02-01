@@ -1081,10 +1081,20 @@ class DecisionEngineV2:
         
         # Signaux contrarian (sentiment extrême)
         fg_value = self.sentiment.get('fear_greed', {}).get('value', 50)
+        
+        # MACD 3D Filter (Major Trend Protection)
+        macd_3d_trend = self.macd.get('available', False) and \
+                       self.macd.get('timeframes', {}).get('3d', {}).get('trend', 'NEUTRAL')
+        
         if fg_value < 20:
-            return SignalType.CONTRARIAN_BUY
+            # ONLY Enable Contrarian Buy if MACD 3D is NOT Bearish
+            if macd_3d_trend != 'BEARISH':
+                return SignalType.CONTRARIAN_BUY
+                
         if fg_value > 80:
-            return SignalType.CONTRARIAN_SELL
+            # ONLY Enable Contrarian Sell if MACD 3D is NOT Bullish
+            if macd_3d_trend != 'BULLISH':
+                return SignalType.CONTRARIAN_SELL
         
         # Signaux macro-alignés
         macro_signal = self.macro.get('btc_impact', {}).get('signal', '')
