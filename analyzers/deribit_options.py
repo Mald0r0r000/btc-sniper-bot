@@ -75,9 +75,12 @@ class DeribitOptionsAnalyzer:
             oi_by_strike = self._aggregate_oi_by_strike(options_data)
             nearest_expiry = self._get_nearest_expiry_analysis(options_data, current_price)
             
-            # 5. Score global
+            # 5. Calculer GEX (Gamma Exposure)
+            gex_profile = self._calculate_gex_profile(options_data, current_price)
+            
+            # 6. Score global
             options_score = self._calculate_options_score(
-                max_pain, pc_ratio, iv_analysis, current_price
+                max_pain, pc_ratio, iv_analysis, gex_profile, current_price
             )
             
             return {
@@ -85,6 +88,7 @@ class DeribitOptionsAnalyzer:
                 "max_pain": max_pain,
                 "put_call_ratio": pc_ratio,
                 "iv_analysis": iv_analysis,
+                "gex_profile": gex_profile,  # ADDED: GEX
                 "open_interest": oi_by_strike,
                 "nearest_expiry": nearest_expiry,
                 "score": options_score,
@@ -448,67 +452,122 @@ class DeribitOptionsAnalyzer:
         # Temps restant
         time_to_expiry_hours = (nearest_ts - now) / (1000 * 3600)
         
+        }
+    
+    def _calculate_gex_profile(self, options: List[Dict], current_price: float) -> Dict:
+        """
+        Calcule l'exposition Gamma (GEX) des Dealers.
+        
+        Modèle:
+        - Puts: Clients vendent (DOVs, Yield) -> Dealers Long -> Gamma Positif (Sticky/Stabilisant)
+        - Calls: Clients achètent (Spec) -> Dealers Short -> Gamma Négatif (Volatile/Accélérant)
+        
+        Dealer Net Gamma = (Put Gamma * OI) - (Call Gamma * OI)
+        """
+        net_gamma = 0
+        total_gamma = 0
+        gex_by_strike = defaultdict(float)
+        
+        # Pour estimer le Zero Gamma Level, on track le GEX cumulé par strike
+        
+        for opt in options:
+            gamma = opt.get("greeks", {}).get("gamma", 0)
+            oi = opt.get("open_interest", 0)
+            strike = opt.get("strike", 0)
+            
+            # Option Notional Value involved in Gamma
+            # GEX USD = Gamma * OI * Spot * Spot / 100 (approximation standard)
+            # Ou plus simplement en BTC: Gamma * OI
+            # On utilise souvent: Gamma * OI * Spot pour avoir l'impact notionnel en $ par 1% move
+            
+            gex_value = gamma * oi * current_price
+            
+            if opt.get("option_type") == "put":
+                # Dealer Long Put -> +Gamma
+                gex_by_strike[strike] += gex_value
+                net_gamma += gex_value
+            else:
+                # Dealer Short Call -> -Gamma
+                gex_by_strike[strike] -= gex_value
+                net_gamma -= gex_value
+                
+            total_gamma += abs(gex_value)
+
+        # Normaliser en $ millions
+        net_gex_usd_m = net_gamma / 1_000_000
+        
+        # Trouver Zero Gamma Price (approx)
+        # On regarde où le Net GEX change de signe si on bougeait le prix ?
+        # C'est complexe sans recalculer le BS. 
+        # Approximation: Regarder le strike où le GEX cumulé est proche de 0 ? Non.
+        # Approximation simple: Strike avec le plus gros "flip" ou simplement le niveau actuel.
+        
+        # Interprétation
+        if net_gex_usd_m > 5:
+            regime = "POSITIVE_GAMMA"
+            desc = "Dealers Long Gamma -> Volatility Suppressed (Buy Dips/Sell Rips)"
+            emoji = "🟢" # Stability
+        elif net_gex_usd_m < -5:
+            regime = "NEGATIVE_GAMMA"
+            desc = "Dealers Short Gamma -> Volatility Amplified (Chase Moves)"
+            emoji = "🔴" # Volatility
+        else:
+            regime = "NEUTRAL_GAMMA"
+            desc = "Low Gamma Exposure"
+            emoji = "⚪"
+            
         return {
-            "expiry": nearest_expiry,
-            "hours_to_expiry": round(time_to_expiry_hours, 1),
-            "call_oi": round(call_oi, 2),
-            "put_oi": round(put_oi, 2),
-            "pcr": round(put_oi / call_oi, 3) if call_oi > 0 else 0,
-            "options_count": len(expiry_opts)
+            "net_gex_usd_m": round(net_gex_usd_m, 2),
+            "total_gamma_usd_m": round(total_gamma / 1_000_000, 2),
+            "regime": regime,
+            "description": desc,
+            "emoji": emoji,
+            # Top strikes by Abs GEX impact
+            "key_levels": sorted(
+                [(s, v/1_000_000) for s,v in gex_by_strike.items()],
+                key=lambda x: abs(x[1]), reverse=True
+            )[:5]
         }
     
     def _calculate_options_score(self, max_pain: Dict, pc_ratio: Dict, 
-                                  iv_analysis: Dict, current_price: float) -> Dict:
-        """Calcule un score global basé sur les options (0-100)"""
-        score = 50  # Base neutre
+                                  iv_analysis: Dict, gex: Dict, current_price: float) -> Dict:
+        """Calcule un score global options"""
+        score = 50
         factors = []
         
-        # 1. Max Pain gravity (-15 à +15)
-        mp_signal = max_pain.get("signal", "NEUTRAL")
-        if mp_signal == "BULLISH":
-            score += 15
-            factors.append("+15 Prix sous Max Pain (gravité haussière)")
-        elif mp_signal == "BEARISH":
-            score -= 15
-            factors.append("-15 Prix au-dessus Max Pain (gravité baissière)")
-        
-        # 2. Put/Call Ratio (-10 à +10)
-        pcr = pc_ratio.get("pcr_oi", 1)
-        if pcr < 0.7:
+        # 1. Max Pain (Gravity)
+        if max_pain.get("signal") == "BULLISH":
             score += 10
-            factors.append(f"+10 PCR bas ({pcr:.2f}) = Bullish")
-        elif pcr > 1.2:
+            factors.append("+10 Bullish Gravity (Under Max Pain)")
+        elif max_pain.get("signal") == "BEARISH":
             score -= 10
-            factors.append(f"-10 PCR élevé ({pcr:.2f}) = Bearish")
+            factors.append("-10 Bearish Gravity (Above Max Pain)")
+            
+        # 2. PCR
+        pcr = pc_ratio.get("pcr_oi", 1)
+        if pcr < 0.7: score += 10
+        elif pcr > 1.2: score -= 10
         
-        # 3. IV environment (-5 à +5)
-        iv_env = iv_analysis.get("iv_environment", "NORMAL")
-        if iv_env == "LOW":
+        # 3. IV
+        iv = iv_analysis.get("iv_environment")
+        if iv == "LOW": score += 5
+        elif iv == "VERY_HIGH": score -= 5
+        
+        # 4. GEX (Nouveau)
+        # Positive GEX = Bullish pour le "Range" (Support tient)
+        # Negative GEX = Bearish si prix baisse, Bullish si prix monte (Accélération)
+        # C'est contextuel. On va dire:
+        # Positive GEX -> +Stabilizing (Bon pour swing setups)
+        # Negative GEX -> +Risk (Bon pour breakout, mauvais pour range)
+        
+        gex_val = gex.get("net_gex_usd_m", 0)
+        if gex_val > 0:
             score += 5
-            factors.append("+5 IV basse = Calme (potentiel de mouvement)")
-        elif iv_env == "VERY_HIGH":
-            score -= 5
-            factors.append("-5 IV très élevée = Risque de contraction")
-        
-        # Normaliser
-        score = max(0, min(100, score))
-        
-        if score >= 60:
-            sentiment = "BULLISH"
-            emoji = "🟢"
-        elif score >= 45:
-            sentiment = "NEUTRAL"
-            emoji = "⚪"
+            factors.append(f"+5 Positive Gamma (${gex_val}M) - Sticky Market")
         else:
-            sentiment = "BEARISH"
-            emoji = "🔴"
-        
-        return {
-            "value": round(score, 1),
-            "sentiment": sentiment,
-            "emoji": emoji,
-            "factors": factors
-        }
+            # Negative gamma increase risk/volatility
+            factors.append(f"⚠️ Negative Gamma (${gex_val}M) - Volatility Warning")
+
 
 
 # ============================================================
@@ -547,6 +606,7 @@ class OptionsAnalyzer:
             "max_pain": {"max_pain_price": 0, "signal": "UNKNOWN"},
             "put_call_ratio": {"pcr_oi": 1.0, "signal": "NEUTRAL"},
             "iv_analysis": {"average_iv": 50, "iv_environment": "NORMAL"},
+            "gex_profile": {"net_gex_usd_m": 0, "regime": "NEUTRAL"}, # ADDED
             "score": {"value": 50, "sentiment": "NEUTRAL", "emoji": "⚪"}
         }
         
