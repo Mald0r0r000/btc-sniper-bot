@@ -302,6 +302,27 @@ class GistDataStore:
             "Accept": "application/vnd.github.v3+json"
         }
     
+    def _get_file_content(self, file_data: Dict[str, Any]) -> Optional[str]:
+        """
+        Retrieves file content, handling GitHub API truncation (>1MB).
+        If truncated, fetches full content from raw_url.
+        """
+        if file_data.get("truncated", False):
+            raw_url = file_data.get("raw_url")
+            if raw_url:
+                print(f"   📥 Fetching full content from raw_url (truncated)...")
+                try:
+                    response = requests.get(raw_url, timeout=30)
+                    if response.ok:
+                        return response.text
+                    else:
+                        print(f"⚠️ Failed to fetch raw content: {response.status_code}")
+                except Exception as e:
+                    print(f"⚠️ Error fetching raw content: {e}")
+            return None
+        
+        return file_data.get("content")
+    
     def create_gist(self, description: str = "BTC Sniper Bot - Signal History") -> Optional[str]:
         """Crée un nouveau Gist et retourne son ID"""
         if not self.github_token:
@@ -366,7 +387,12 @@ class GistDataStore:
                     print(f"⚠️ Fichier {self.GIST_FILENAME} absent du Gist")
                     return []
                     
-                content = files[self.GIST_FILENAME]["content"]
+                content = self._get_file_content(files[self.GIST_FILENAME])
+                
+                if content is None:
+                    print(f"⚠️ Failed to get content for {self.GIST_FILENAME}")
+                    return None
+                    
                 if not content:
                     return []
                     
@@ -549,7 +575,10 @@ class GistDataStore:
                 files = gist_data.get("files", {})
                 
                 if self.WEIGHTS_FILENAME in files:
-                    content = files[self.WEIGHTS_FILENAME]["content"]
+                    content = self._get_file_content(files[self.WEIGHTS_FILENAME])
+                    if content is None:
+                        return None
+                        
                     weights_data = json.loads(content)
                     print(f"   🧠 Poids adaptatifs chargés depuis le Gist")
                     return weights_data
@@ -630,7 +659,11 @@ class GistDataStore:
                 files = gist_data.get("files", {})
                 
                 if self.OI_HISTORY_FILENAME in files:
-                    content = files[self.OI_HISTORY_FILENAME]["content"]
+                    content = self._get_file_content(files[self.OI_HISTORY_FILENAME])
+                    if content is None:
+                        print(f"⚠️ Failed to get content for {self.OI_HISTORY_FILENAME}")
+                        return None
+                        
                     history_data = json.loads(content)
                     print(f"   📈 Historique OI chargé depuis Gist ({len(history_data)} points)")
                     return history_data

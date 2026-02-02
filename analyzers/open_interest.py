@@ -39,7 +39,8 @@ class OpenInterestAnalyzer:
     def _load_history(self) -> deque:
         """Charge l'historique précédent"""
         # 1. Try Gist first (Source of Truth for persistence)
-        if self.gist_store:
+        # Check if we have a token (configured) before trying to load
+        if self.gist_store and self.gist_store.github_token:
             gist_data = self.gist_store.load_oi_history()
             
             if gist_data is None:
@@ -58,6 +59,9 @@ class OpenInterestAnalyzer:
                     return deque(gist_data, maxlen=self.MAX_HISTORY)
                 else:
                     return deque(maxlen=self.MAX_HISTORY)
+        elif self.gist_store:
+            # Gist store exists but no token - Silent fallback to local
+            self.disable_gist_save = True # Implicitly disabled since no token
 
         # 2. Fallback to local file
         try:

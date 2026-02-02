@@ -18,3 +18,4 @@ ENV/
 # Output
 analysis_report.json
 *.log
+oi_history.json
