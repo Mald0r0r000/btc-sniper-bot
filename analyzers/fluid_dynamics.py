@@ -337,21 +337,21 @@ class VenturiAnalyzer:
     
     def _analyze_depth(self, bids: List, asks: List) -> Dict[str, Any]:
         """Analyse la profondeur de l'order book"""
-        # Profondeur sur les 5 premiers niveaux
-        bid_depth = sum(float(b[1]) for b in bids[:5]) if bids else 0
-        ask_depth = sum(float(a[1]) for a in asks[:5]) if asks else 0
+        # Profondeur sur les 15 premiers niveaux (proche du marché)
+        bid_depth = sum(float(b[1]) for b in bids[:15]) if bids else 0
+        ask_depth = sum(float(a[1]) for a in asks[:15]) if asks else 0
         
-        # Profondeur totale (10 niveaux)
-        bid_depth_10 = sum(float(b[1]) for b in bids[:10]) if bids else 0
-        ask_depth_10 = sum(float(a[1]) for a in asks[:10]) if asks else 0
+        # Profondeur étendue (30 niveaux) pour détecter les murs distants
+        bid_depth_30 = sum(float(b[1]) for b in bids[:30]) if bids else 0
+        ask_depth_30 = sum(float(a[1]) for a in asks[:30]) if asks else 0
         
         # Ratio de déséquilibre
         total = bid_depth + ask_depth
         ratio = bid_depth / ask_depth if ask_depth > 0 else 1.0
         
-        # Concentration (profondeur top 5 / top 10)
-        bid_concentration = bid_depth / bid_depth_10 if bid_depth_10 > 0 else 0.5
-        ask_concentration = ask_depth / ask_depth_10 if ask_depth_10 > 0 else 0.5
+        # Concentration (profondeur top 15 / top 30)
+        bid_concentration = bid_depth / bid_depth_30 if bid_depth_30 > 0 else 0.5
+        ask_concentration = ask_depth / ask_depth_30 if ask_depth_30 > 0 else 0.5
         
         return {
             'bid_depth': bid_depth,
@@ -397,11 +397,11 @@ class VenturiAnalyzer:
         
         Pression = Densité × Profondeur
         """
-        # Pression bid = volume proche du marché
-        bid_pressure = sum(float(b[1]) * (1 / (i + 1)) for i, b in enumerate(bids[:10]))
+        # Pression bid = volume proche du marché (pondéré par distance)
+        bid_pressure = sum(float(b[1]) * (1 / (i + 1)) for i, b in enumerate(bids[:30]))
         
-        # Pression ask = volume proche du marché
-        ask_pressure = sum(float(a[1]) * (1 / (i + 1)) for i, a in enumerate(asks[:10]))
+        # Pression ask = volume proche du marché (pondéré par distance)
+        ask_pressure = sum(float(a[1]) * (1 / (i + 1)) for i, a in enumerate(asks[:30]))
         
         # Différentiel de pression
         differential = bid_pressure - ask_pressure
