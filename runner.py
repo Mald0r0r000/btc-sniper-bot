@@ -262,7 +262,6 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 "reg": adx_data.get("regime"),  # ADX regime (TRENDING/RANGING/TRANSITION)
                 "atd": adx_data.get("trend_direction"),  # ADX trend direction (BULLISH/BEARISH/NEUTRAL)
                 "dip": adx_data.get("plus_di"),  # DI+ value
-                "dip": adx_data.get("plus_di"),  # DI+ value
                 "dim": adx_data.get("minus_di"),  # DI- value
                 # MACD 3D data (extracted from mtf_data['3d'])
                 "mcd": {

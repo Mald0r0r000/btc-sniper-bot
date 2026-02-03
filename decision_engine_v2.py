@@ -413,6 +413,9 @@ class DecisionEngineV2:
         # 1. Calculer les scores par dimension
         dimension_scores = self._calculate_dimension_scores()
         
+        # Initialize warnings list for quality filter notes
+        warnings = []
+        
         # 2. Calculer le score composite
         raw_score, weighted_scores = self._calculate_composite_score(dimension_scores)
         
@@ -482,10 +485,7 @@ class DecisionEngineV2:
             direction = SignalDirection.SHORT # Flush DOWN implies SHORT
         
         # 6b. QUALITY FILTERS (validated via backtesting: +6.2% WR, +$1590 P&L)
-        # Filter 1: Skip LONG_BREAKOUT (0% WR in historical backtests)
-        if signal_type == SignalType.LONG_BREAKOUT:
-            signal_type = SignalType.NO_SIGNAL
-            direction = SignalDirection.NEUTRAL
+        # NOTE: LONG_BREAKOUT filter removed - no longer generated in _select_signal_type
         
         # Filter 2: Downgrade signals with NEUTRAL consistency + declining confidence
         if self.consistency_status == 'NEUTRAL' and self.consistency_score < -15:
@@ -551,7 +551,7 @@ class DecisionEngineV2:
             adjusted_score -= htf_penalty
         
         # Filter 5: Confluence Check (Asymmetric thresholds)
-        # LONG: Require 3+ dimensions > 55
+        # LONG: Require 2+ dimensions > 55
         # SHORT: Require 2+ dimensions < 45 (looser threshold due to bullish bias in whale/macro data)
         if signal_type not in [SignalType.NO_SIGNAL]:
             bullish_dims = sum(1 for score in dimension_scores.values() if score > 55)
@@ -727,15 +727,16 @@ class DecisionEngineV2:
         kdj_values = self.kdj.get('values', {})
         j_val = kdj_values.get('j', 50)
         
-        # Penalize High J (Overbought) - BOOSTED IMPACT
-        # UPDATE: Increased multiplier to 2.5 (Strong Reversion Predictor)
+        # Penalize High J (Overbought)
+        # NOTE: Reduced multiplier from 2.5 to 1.5 (max ±30 pts) to prevent 
+        # KDJ alone from overriding all other indicators
         if j_val > 80:
-            penalty = (j_val - 80) * 2.5  # Max penalty ~50 points
+            penalty = (j_val - 80) * 1.5  # Max penalty ~30 points
             score -= penalty
             
-        # Boost Low J (Oversold) - BOOSTED IMPACT
+        # Boost Low J (Oversold)
         elif j_val < 20:
-            bonus = (20 - j_val) * 2.5    # Max bonus ~50 points
+            bonus = (20 - j_val) * 1.5    # Max bonus ~30 points
             score += bonus
             
         # Slope confirmation (only if favorable)
@@ -1090,8 +1091,7 @@ class DecisionEngineV2:
             return SignalType.LONG_SNIPER
         
         # Breakouts
-        if near_vah and self.cvd.get('net_cvd', 0) > 50:
-            return SignalType.LONG_BREAKOUT
+        # NOTE: LONG_BREAKOUT removed - 0% WR in backtests, see quality filters
         
         if near_val and self.cvd.get('net_cvd', 0) < -50:
             return SignalType.SHORT_BREAKOUT
@@ -1514,10 +1514,7 @@ class DecisionEngineV2:
             targets['tp2'] = round(current_price * (1.02 if direction == SignalDirection.LONG else 0.98), 1)
         if 'sl' not in targets:
             targets['sl'] = round(current_price * (0.995 if direction == SignalDirection.LONG else 1.005), 2)
-        if 'tp2' not in targets:
-            targets['tp2'] = round(current_price * (1.02 if direction == SignalDirection.LONG else 0.98), 1)
-        if 'sl' not in targets:
-            targets['sl'] = round(current_price * (0.995 if direction == SignalDirection.LONG else 1.005), 2)
+        
         
         # 4. Validation finale: contraintes R:R et distance max
         targets = self._validate_and_adjust_targets(targets, current_price, direction)
