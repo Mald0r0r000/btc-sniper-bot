@@ -9,3 +9,8 @@ yfinance>=0.2.0
 fredapi>=0.5.0
 gspread>=5.10.0
 google-auth>=2.22.0
+
+# Analysis & Visualization
+matplotlib>=3.7.0
+seaborn>=0.12.0
+tabulate>=0.9.0

@@ -82,3 +82,11 @@ MIN_WALL_VALUE_M = 1.0  # Minimum 1M$ pour un mur significatif
 CVD_BREAKOUT_THRESHOLD = 50  # CVD net minimum pour breakout
 AGGRESSION_BULLISH = 1.5  # Ratio agression pour breakout
 AGGRESSION_BEARISH = 0.8  # Ratio agression bearish
+
+# ==========================================
+# BLACKBOX OPTIMIZATION (Meta-Analysis 2026)
+# ==========================================
+ATR_MAX_THRESHOLD = 865.0  # Volatility Cutoff (Median)
+GEX_BOOST_VALUE = 15.0     # Boost for Positive Gamma Stability
+LIQUIDATION_NEAR_PCT = 1.0 # Magnet Zone distance
+
