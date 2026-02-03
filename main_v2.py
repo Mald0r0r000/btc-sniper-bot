@@ -87,16 +87,20 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         current_price = connector.get_current_price()
         print(f"   💰 Prix Bitget: ${current_price:,.2f}")
     
-    # OHLCV Multi-Timeframe
-    df_micro = connector.fetch_ohlcv(config.TIMEFRAME_MICRO, limit=1000)
-    df_meso = connector.fetch_ohlcv(config.TIMEFRAME_MESO, limit=500)
-    df_macro = connector.fetch_ohlcv(config.TIMEFRAME_MACRO, limit=30)
+    # OHLCV Multi-Timeframe (all needed for Smart Entry + Fractal Targets)
+    df_micro = connector.fetch_ohlcv(config.TIMEFRAME_MICRO, limit=1000)  # 5m
+    df_15m = connector.fetch_ohlcv('15m', limit=500)  # 15m for Smart Entry
+    df_meso = connector.fetch_ohlcv(config.TIMEFRAME_MESO, limit=500)  # 1h
+    df_4h = connector.fetch_ohlcv('4h', limit=200)  # 4h for Fractal Targets
+    df_macro = connector.fetch_ohlcv(config.TIMEFRAME_MACRO, limit=30)  # 1d
     
-    print(f"   📈 Bougies: {len(df_micro)} (5m) | {len(df_meso)} (1h) | {len(df_macro)} (1d)")
+    print(f"   📈 Bougies: {len(df_micro)} (5m) | {len(df_15m) if df_15m is not None else 0} (15m) | {len(df_meso)} (1h) | {len(df_4h) if df_4h is not None else 0} (4h) | {len(df_macro)} (1d)")
     
-    # Convertir en liste de dicts pour les Liquidation Zones et Smart Entry
+    # Convertir en liste de dicts pour les analyzers
     candles_5m = df_micro.to_dict('records') if df_micro is not None and len(df_micro) > 0 else []
+    candles_15m = df_15m.to_dict('records') if df_15m is not None and len(df_15m) > 0 else []
     candles_1h = df_meso.to_dict('records') if df_meso is not None and len(df_meso) > 0 else []
+    candles_4h = df_4h.to_dict('records') if df_4h is not None and len(df_4h) > 0 else []
     
     # Order Book
     order_book = connector.fetch_order_book(limit=config.ORDER_BOOK_LIMIT)
@@ -557,7 +561,9 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         trading_style='intraday_1h_2d',  # Poids optimisés pour signaux 1H-2D
         consistency_data=consistency_data,  # For quality filters
         candles_5m=candles_5m,  # Pour les zones de liquidation
+        candles_15m=candles_15m,  # Pour Smart Entry MTF
         candles_1h=candles_1h,  # Pour Smart Entry (Robustesse)
+        candles_4h=candles_4h,  # Pour Fractal Targets MTF
         venturi_data=venturi_result,  # Fluid dynamics - Venturi
         self_trading_data=self_trading_result,  # Fluid dynamics - Self-Trading
         hyperliquid_data=hyperliquid_result,  # Whale tracking sentiment

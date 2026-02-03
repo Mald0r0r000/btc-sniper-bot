@@ -214,6 +214,7 @@ class DecisionEngineV2:
         consistency_data: Dict = None,
         # Candles pour liquidation zones et MTF targets
         candles_5m: List[Dict] = None,
+        candles_15m: List[Dict] = None,
         candles_1h: List[Dict] = None,
         candles_4h: List[Dict] = None,
         # Fluid Dynamics (Venturi et Self-Trading)
@@ -271,6 +272,7 @@ class DecisionEngineV2:
         self.oi = open_interest or {}
         self.options = options_data or {}
         self.candles_5m = candles_5m or []
+        self.candles_15m = candles_15m or []
         self.candles_1h = candles_1h or []
         self.candles_4h = candles_4h or []
         
@@ -1290,7 +1292,7 @@ class DecisionEngineV2:
                     original_tp2=targets.get('tp2', self.price),
                     original_sl=targets.get('sl', self.price),
                     candles=self.candles_1h,
-                    candles_15m=self.candles_15m if hasattr(self, 'candles_15m') else None,
+                    candles_15m=self.candles_15m,
                     liq_zones=self.liq_analyzer.analyze(self.candles_5m, self.price) if self.candles_5m else None,
                     mtf_macd_context=self.macd  # Pass MTF MACD context
                 )
