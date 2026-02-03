@@ -629,7 +629,9 @@ class DecisionEngineV2:
             'manipulation_penalty': round(manipulation_penalty, 2),
             'market_context': market_context,
             'signal_strength': self._get_signal_strength(adjusted_score),
-            'tradeable': adjusted_score >= self.CONFIDENCE_THRESHOLDS['WEAK']
+            # FIX: Tradeable if deviation from 50 is significant (>10 points)
+            # This allows Score < 40 (Shorts) and Score > 60 (Longs)
+            'tradeable': abs(adjusted_score - 50) >= 10
         }
     
     def _calculate_dimension_scores(self) -> Dict[str, float]:
@@ -1607,13 +1609,17 @@ class DecisionEngineV2:
         return score
 
     def _get_signal_strength(self, score: float) -> str:
-        """Retourne la force du signal"""
-        if score >= self.CONFIDENCE_THRESHOLDS['STRONG']:
+        """Retourne la force du signal (Bi-directionnel)"""
+        # Symmetric deviation from 50
+        deviation = abs(score - 50)
+        
+        # Strong: Deviation >= 30 (Score >= 80 or <= 20)
+        if deviation >= 30:
             return "STRONG"
-        elif score >= self.CONFIDENCE_THRESHOLDS['MODERATE']:
+        # Moderate: Deviation >= 10 (Score >= 60 or <= 40)
+        elif deviation >= 10:
             return "MODERATE"
-        elif score >= self.CONFIDENCE_THRESHOLDS['WEAK']:
-            return "WEAK"
+        # Weak/Neutral: Deviation < 10 (40 < Score < 60)
         else:
             return "NO_TRADE"
 
