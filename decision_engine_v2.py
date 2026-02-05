@@ -1370,8 +1370,18 @@ class DecisionEngineV2:
                     'current_price': self.price,
                     'liq_zone': smart_result.nearest_liq_zone,
                     'rr_improvement': smart_result.potential_improvement_pct,
+                    'rr_improvement': smart_result.potential_improvement_pct,
                     'timeout_hours': smart_result.entry_timeout_hours
                 }
+                
+                # UPDATE TARGETS with Smart Entry values
+                # This ensures the final signal (and CSV) reflects the safer SL and optimal entry
+                if smart_result.adjusted_sl:
+                    targets['sl'] = smart_result.adjusted_sl
+                
+                # Optional: Update entry price in targets if we want to reflect the limit order
+                # targets['entry'] = smart_result.optimal_entry 
+                # (Entry is usually implicit in signal, but SL is explicit in targets)
                 
                 # Add to reasons if not immediate
                 if smart_result.strategy != EntryStrategy.IMMEDIATE:

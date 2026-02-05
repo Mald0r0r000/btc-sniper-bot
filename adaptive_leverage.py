@@ -58,12 +58,13 @@ class AdaptiveLeverageCalculator:
         self.max_position_loss_pct = max_position_loss_pct
         
         # Leverage tiers by TP distance
+        # REVISED (Conservative): Cap at 25x to avoid liquidation risks
         self.leverage_tiers = [
-            (1.0, (50, 100)),   # <1% TP → 50-100x
-            (2.0, (23, 50)),    # 1-2% TP → 23-50x
-            (3.0, (15, 23)),    # 2-3% TP → 15-23x
-            (5.0, (10, 15)),    # 3-5% TP → 10-15x
-            (float('inf'), (5, 10))  # >5% TP → 5-10x
+            (1.0, (15, 25)),    # <1% TP → 15-25x (Scalping)
+            (2.0, (10, 20)),    # 1-2% TP → 10-20x (Intraday)
+            (3.0, (5, 15)),     # 2-3% TP → 5-15x (Swing)
+            (5.0, (3, 10)),     # 3-5% TP → 3-10x
+            (float('inf'), (2, 5))   # >5% TP → 2-5x
         ]
     
     def calculate(
