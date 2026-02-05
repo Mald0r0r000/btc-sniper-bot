@@ -364,6 +364,7 @@ def run_scheduled_analysis() -> Dict[str, Any]:
         
 
         # Notifier uniquement si signal de qualité ET confiance >= 65%
+        # Notifier uniquement si signal de qualité ET confiance >= 65%
         if telegram_enabled and confidence >= confidence_threshold and is_quality_signal:
             print(f"\n📱 Envoi notification Telegram ({signal_type}, {confidence:.0f}%)...")
             # Récupérer l'historique pour le compteur de signaux consécutifs
@@ -377,10 +378,14 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 print("❌ Échec notification")
         elif telegram_enabled and confidence >= confidence_threshold and not is_quality_signal:
             print(f"\n🔇 Signal {signal_type} exclu (faible winrate historique)")
+            print(f"   ℹ️ Types autorisés: {QUALITY_SIGNAL_TYPES}")
         elif confidence >= confidence_threshold:
             print("\n⚠️ Signal fort mais Telegram non configuré")
         else:
             print(f"\n💤 Signal faible ({confidence:.0f}/100) - Pas de notification")
+            print(f"   ℹ️ Seuil requis: {confidence_threshold}")
+            if not is_quality_signal:
+                print(f"   ℹ️ Type {signal_type} non qualifié")
         
         return report
         
