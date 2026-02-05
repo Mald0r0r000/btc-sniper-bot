@@ -162,7 +162,7 @@ class TelegramNotifier:
         # OI Delta - Récupérer depuis indicators.open_interest ou key_metrics
         oi_data = indicators.get('open_interest', {})
         # Le delta est souvent dans le rapport principal, pas dans indicators
-        oi_delta = report.get('open_interest', {}).get('delta', {}).get('1h', {}).get('delta_oi_pct', 0)
+        oi_delta = oi_data.get('delta', {}).get('1h', {}).get('delta_oi_pct', 0)
         if oi_delta == 0:
             # Fallback: chercher dans key_metrics si disponible
             oi_delta = report.get('key_metrics', {}).get('oi_delta_1h', 0) or 0

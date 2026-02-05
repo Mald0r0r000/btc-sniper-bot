@@ -1340,7 +1340,7 @@ class DecisionEngineV2:
             },
             'sentiment_metrics': {
                 'fear_greed': sentiment_data.get('fear_greed', {}).get('value', 50) if isinstance(sentiment_data, dict) else 50,
-                'oi_change': oi_data.get('change_24h', 0) if isinstance(oi_data, dict) else 0
+                'oi_change': oi_data.get('delta', {}).get('24h', {}).get('delta_oi_pct', 0) if isinstance(oi_data, dict) else 0
             }
         }
         # Inject into targets as metadata

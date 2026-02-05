@@ -46,6 +46,28 @@ class LiquidationAnalyzer:
         levels = self._calculate_liquidation_levels(swings)
         clusters = self._cluster_levels(levels, current_price)
         
+        # Fallback: If no clusters found, use raw levels as "weak" clusters
+        if not clusters['longs'] and levels:
+            raw_longs = [l for l in levels if l.type == 'LONG_LIQ' and l.price < current_price]
+            if raw_longs:
+                 # Create pseudo-cluster from nearest raw level
+                 nearest_raw = max(raw_longs, key=lambda l: l.price)
+                 clusters['longs'].append({
+                     "price": nearest_raw.price,
+                     "intensity": 1,
+                     "volume_score": 5 # Low score
+                 })
+                 
+        if not clusters['shorts'] and levels:
+            raw_shorts = [l for l in levels if l.type == 'SHORT_LIQ' and l.price > current_price]
+            if raw_shorts:
+                 nearest_raw = min(raw_shorts, key=lambda l: l.price)
+                 clusters['shorts'].append({
+                     "price": nearest_raw.price,
+                     "intensity": 1,
+                     "volume_score": 5
+                 })
+        
         # Trouver les clusters les plus proches
         nearest_long = self._find_nearest_cluster(clusters['longs'], current_price, is_long=True)
         nearest_short = self._find_nearest_cluster(clusters['shorts'], current_price, is_long=False)
