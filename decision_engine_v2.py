@@ -1378,17 +1378,23 @@ class DecisionEngineV2:
                     if smart_result.strategy == EntryStrategy.WAIT_FOR_DIP:
                         strategy_text = f"⏳ Attendre ${smart_result.optimal_entry:,.0f} (+{smart_result.potential_improvement_pct:.0f}% R:R)"
                     else:
-                        strategy_text = f"📝 Limite ${smart_result.optimal_entry:,.0f}"
+                strategy_text = f"📝 Limite ${smart_result.optimal_entry:,.0f}"
                     reasons.append(strategy_text)
                     
             except Exception as e:
                 print(f"   ⚠️ Smart Entry failed: {e}")
                 smart_entry_data = None
         
+        # Calculate true confidence (0-100) based on deviation from neutral (50)
+        # Score 50 -> Confidence 0
+        # Score 100 -> Confidence 100
+        # Score 0 -> Confidence 100
+        recalculated_confidence = abs(adjusted_score - 50) * 2
+        
         return CompositeSignal(
             type=signal_type,
             direction=direction,
-            confidence=adjusted_score,
+            confidence=recalculated_confidence, # FIX: Used to be adjusted_score
             raw_score=raw_score,
             adjusted_score=adjusted_score,
             emoji=emojis.get(signal_type, "📊"),
