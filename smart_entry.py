@@ -182,7 +182,8 @@ class SmartEntryAnalyzer:
                         direction=direction,
                         entry_price=optimal_entry,
                         liq_zones={'long': selected_zone} if direction == 'LONG' else {'short': selected_zone},
-                        current_price=current_price
+                        current_price=current_price,
+                        candles=candles
                     )
                     if 'moved' in sl_justification:
                         print(f"   🛡️ Stop Hunt Protection: {sl_justification}")
@@ -228,7 +229,7 @@ class SmartEntryAnalyzer:
                 if liq_distance_pct <= self.max_wait_distance_pct:
                     # Calculate optimal entry point
                     optimal_entry, adjusted_sl = self._calculate_smart_entry(
-                        direction, current_price, nearest_liq
+                        direction, current_price, nearest_liq, candles
                     )
                     
                     # Calculate improved R:R
@@ -259,6 +260,22 @@ class SmartEntryAnalyzer:
                 if improvement >= self.min_improvement_pct * 100:
                     strategy = EntryStrategy.LIMIT_ORDER
         
+        # === FINAL SAFETY CHECK: Liquidity Shadowing ===
+        # Ensure we are protected by shadowing strategy regardless of which path was taken
+        final_safe_sl, shadow_reason = self.calculate_safe_sl(
+            initial_sl=adjusted_sl,
+            direction=direction,
+            entry_price=optimal_entry,
+            liq_zones=liq_zones,
+            current_price=current_price,
+            candles=candles
+        )
+        # If the shadow SL is different/safer, use it
+        if final_safe_sl != adjusted_sl:
+            adjusted_sl = final_safe_sl
+            if strategy != EntryStrategy.IMMEDIATE:
+                print(f"   🛡️ Shadow SL Applied: {shadow_reason}")
+                
         return SmartEntryResult(
             strategy=strategy,
             current_price=current_price,
@@ -307,7 +324,8 @@ class SmartEntryAnalyzer:
         self,
         direction: str,
         current_price: float,
-        liq_zone: float
+        liq_zone: float,
+        candles: Optional[List[Dict]] = None
     ) -> Tuple[float, float]:
         """Calculate optimal entry and SL based on liq zone"""
         buffer = liq_zone * (self.entry_buffer_pct / 100)
@@ -330,7 +348,8 @@ class SmartEntryAnalyzer:
             direction=direction,
             entry_price=optimal_entry,
             liq_zones={'long': liq_zone} if direction == 'LONG' else {'short': liq_zone},
-            current_price=optimal_entry
+            current_price=optimal_entry,
+            candles=candles
         )
         
         return round(optimal_entry, 1), round(adjusted_sl, 1)
@@ -464,138 +483,176 @@ class SmartEntryAnalyzer:
         levels.sort(key=lambda x: x['distance_pct'])
         return levels
     
+    def _find_shadow_zone(
+        self,
+        direction: str,
+        current_price: float,
+        liq_zones: Dict,
+        candles: Optional[List[Dict]] = None
+    ) -> Tuple[Optional[float], str]:
+        """
+        Find a safe "shadow" zone for SL placement.
+        
+        Strategy:
+        1. Identify "Fuel" clusters (Opposite Liquidations)
+           - LONG: Long Liqs below price (Market wants to grab these before going up)
+           - SHORT: Short Liqs above price (Market wants to grab these before going down)
+        2. Place SL BEHIND these fuel clusters (Liquidity Shadowing)
+        3. Fallback: Structural Swing Points
+        """
+        shadow_price = None
+        reason = "Default"
+        
+        # 1. Analyze Liquidation Clusters (Fuel)
+        clusters = []
+        if direction == "LONG":
+            # For LONG, we fear the dip that grabs liquidity below
+            clusters = liq_zones.get('clusters_below', []) if liq_zones else []
+            # Filter for clusters that look like fuel (Longs getting rekt)
+            # Or simplified: any cluster below is support/fuel
+        else:
+            # For SHORT, we fear the pump that grabs liquidity above
+            clusters = liq_zones.get('clusters_above', []) if liq_zones else []
+            
+        if clusters:
+            # Find the strongest nearby cluster to hide behind
+            # We want the nearest significant cluster
+            valid_clusters = [c for c in clusters if c['strength'] >= 2] # Min strength
+            
+            if valid_clusters:
+                # Take the first one (nearest)
+                nearest_cluster = valid_clusters[0]
+                cluster_edge = nearest_cluster['min_price'] if direction == "LONG" else nearest_cluster['max_price']
+                
+                # Set Shadow Price
+                # LONG: Below the cluster min
+                # SHORT: Above the cluster max
+                shadow_price = cluster_edge
+                reason = f"Shadowing Liq Cluster (${nearest_cluster['center_price']:,.0f})"
+                return shadow_price, reason
+
+        # 2. Fallback: Structural Swings (Fractals)
+        if candles and len(candles) >= 20:
+            if direction == "LONG":
+                # Find recent significant low
+                lows = [c.get('low', c.get('l', float('inf'))) for c in candles[-30:]]
+                swing_low = min(lows)
+                # Ensure it's not too close (noise)
+                if (current_price - swing_low) / current_price > 0.002: # 0.2% min distance for structure
+                    shadow_price = swing_low
+                    reason = "Shadowing Swing Low"
+            else:
+                # Find recent significant high
+                highs = [c.get('high', c.get('h', 0)) for c in candles[-30:]]
+                swing_high = max(highs)
+                if (swing_high - current_price) / current_price > 0.002:
+                    shadow_price = swing_high
+                    reason = "Shadowing Swing High"
+                    
+        return shadow_price, reason
+
     def calculate_safe_sl(
         self,
         initial_sl: float,
         direction: str,
         entry_price: float,
         liq_zones: Optional[Dict] = None,
-        current_price: float = None
+        current_price: float = None,
+        candles: Optional[List[Dict]] = None
     ) -> Tuple[float, str]:
         """
-        Adjust SL to avoid stop hunt zones (psychological levels & liq zones).
-        
-        Args:
-            initial_sl: Naive SL from basic calculation
-            direction: LONG or SHORT
-            entry_price: Planned entry price
-            liq_zones: Liquidation zones data
-            current_price: Current market price
-        
-        Returns:
-            (adjusted_sl, justification_message)
+        Calculate a safe SL using Liquidity Shadowing.
+        Overrides any initial naive SL if a better shadow zone is found.
         """
+        # 1. Try to find a Shadow Zone
+        shadow_price, reason = self._find_shadow_zone(direction, entry_price, liq_zones, candles)
+        
         adjusted_sl = initial_sl
-        justification = f"SL kept at ${initial_sl:,.0f} (safe)"
+        justification = "Standard SL"
         
-        # Detect psychological levels near SL
-        psych_levels = self._detect_psychological_levels(initial_sl, scan_range_pct=1.0)
-        
-        # Check if SL is too close to any psychological level
-        dangerous_level = None
-        buffer_needed = 0
-        
-        for level_info in psych_levels:
-            level = level_info['level']
-            level_type = level_info['type']
-            distance = level_info['distance_pct']
+        if shadow_price:
+            # Apply buffer to the shadow price
+            # We use a small buffer just to ensure we are "behind" the wall
+            shadow_buffer = 0.003 # 0.3% buffer
             
-            # Determine if too close based on type
-            if level_type == 'major' and distance <= self.psych_level_threshold_pct:
-                dangerous_level = level
-                buffer_needed = self.psych_major_buffer_pct
-                break
-            elif level_type == 'intermediate' and distance <= self.psych_level_threshold_pct:
-                dangerous_level = level
-                buffer_needed = self.psych_intermediate_buffer_pct
-                break
-            elif level_type == 'minor' and distance <= self.psych_level_threshold_pct * 0.7:
-                dangerous_level = level
-                buffer_needed = self.psych_minor_buffer_pct
-                break
-        
-        # If near dangerous level, move SL further away
-        if dangerous_level:
-            if direction == 'LONG':
-                # For LONG, SL is below entry, move further down (away from psych level)
-                if initial_sl > dangerous_level:
-                    # SL is above dangerous level, move below it
-                    adjusted_sl = dangerous_level * (1 - buffer_needed / 100)
-                else:
-                    # SL is below dangerous level, move even further
-                    adjusted_sl = initial_sl * (1 - buffer_needed / 100)
-            else:  # SHORT
-                # For SHORT, SL is above entry, move further up (away from psych level)
-                if initial_sl < dangerous_level:
-                    # SL is below dangerous level, move above it
-                    adjusted_sl = dangerous_level * (1 + buffer_needed / 100)
-                else:
-                    # SL is above dangerous level, move even further
-                    adjusted_sl = initial_sl * (1 + buffer_needed / 100)
+            if direction == "LONG":
+                shadow_sl = shadow_price * (1 - shadow_buffer)
+                # Logic: Use the LOWER of initial_sl or shadow_sl?
+                # Actually, we want the SAFER one. Deepest one.
+                # But we also want to avoid huge stops.
+                # Let's trust the shadow strategy: ALWAYS hide behind the structure/liq.
+                adjusted_sl = shadow_sl
+            else:
+                shadow_sl = shadow_price * (1 + shadow_buffer)
+                adjusted_sl = shadow_sl
+                
+            justification = f"Shadow Strategy: {reason} (+0.3% buffer)"
+        else:
+            # Fallback: Enforce minimum distance to avoid spread kills
+            min_dist = 0.006 # 0.6% minimum distance if no structure found
             
-            justification = f"SL moved from ${initial_sl:,.0f} to ${adjusted_sl:,.0f} (avoiding ${dangerous_level:,.0f} psych level)"
-        
-        # Additional check: make sure SL isn't too close to liq zones
-        if liq_zones:
-            nearest_liq = None
-            if direction == 'LONG' and 'long' in liq_zones:
-                nearest_liq = liq_zones['long']
-            elif direction == 'SHORT' and 'short' in liq_zones:
-                nearest_liq = liq_zones['short']
-            
-            if nearest_liq:
-                liq_distance_pct = abs(adjusted_sl - nearest_liq) / nearest_liq * 100
-                if liq_distance_pct < 0.1:  # Too close to liq zone
-                    if direction == 'LONG':
-                        adjusted_sl = nearest_liq * (1 - 0.2 / 100)  # Move below
-                    else:
-                        adjusted_sl = nearest_liq * (1 + 0.2 / 100)  # Move above
-                    justification += f" + adjusted for liq zone ${nearest_liq:,.0f}"
-        
-        # Validate R:R doesn't degrade too much
-        if current_price and entry_price:
-            # This is a sanity check, not a strict enforcement
-            # We prioritize avoiding stop hunts over perfect R:R
-            pass
-        
+            if direction == "LONG":
+                min_sl = entry_price * (1 - min_dist)
+                if initial_sl > min_sl: # Initial SL is too close
+                     adjusted_sl = min_sl
+                     justification = "Enforced Min Distance (0.6%)"
+            else:
+                min_sl = entry_price * (1 + min_dist)
+                if initial_sl < min_sl: # Initial SL is too close
+                     adjusted_sl = min_sl
+                     justification = "Enforced Min Distance (0.6%)"
+
         return round(adjusted_sl, 1), justification
 
 
 def test_smart_entry():
     print("=" * 60)
-    print("Testing Smart Entry Analyzer")
+    print("Testing Smart Entry Analyzer (Liquidity Shadowing)")
     print("=" * 60)
     
     analyzer = SmartEntryAnalyzer()
     
-    # Mock liquidation zones
+    # Mock liquidation zones with clusters
     liq_zones = {
-        'zones': [
-            {'price': 94300, 'side': 'LONG', 'volume': 500},
-            {'price': 93800, 'side': 'LONG', 'volume': 300},
-            {'price': 96500, 'side': 'SHORT', 'volume': 400},
+        'clusters_below': [
+            {'center_price': 94500, 'min_price': 94400, 'max_price': 94600, 'strength': 5},
+            {'center_price': 93000, 'min_price': 92800, 'max_price': 93200, 'strength': 3}
+        ],
+        'clusters_above': [
+            {'center_price': 96500, 'min_price': 96400, 'max_price': 96600, 'strength': 4}
         ]
     }
     
+    # Test LONG
+    print("\n--- Test LONG Setup ---")
     result = analyzer.analyze(
         direction="LONG",
         current_price=95000,
         original_tp1=96500,
         original_tp2=97500,
-        original_sl=94000,
+        original_sl=94800, # Naive SL, too close
         liq_zones=liq_zones
     )
     
-    print(f"\n📊 Smart Entry Analysis:")
-    print(f"   Strategy: {result.strategy.value}")
-    print(f"   Current: ${result.current_price:,.0f}")
-    print(f"   Optimal Entry: ${result.optimal_entry:,.0f}")
-    print(f"   Nearest Liq Zone: ${result.nearest_liq_zone:,.0f}" if result.nearest_liq_zone else "   No liq zone found")
-    print(f"   Distance: {result.liq_zone_distance_pct:.2f}%")
-    print(f"\n   R:R: {result.original_rr_ratio:.2f} → {result.improved_rr_ratio:.2f}")
-    print(f"   Improvement: {result.potential_improvement_pct:.0f}%")
+    print(f"Current: 95000, Initial SL: 94800")
+    print(f"Adjusted SL: {result.adjusted_sl}")
+    print(f"Nearest Fuel Cluster: 94400-94600")
+    # Expect SL < 94400
     
-    print(f"\n{analyzer.format_recommendation(result, 'LONG')}")
+    # Test SHORT
+    print("\n--- Test SHORT Setup ---")
+    result_s = analyzer.analyze(
+        direction="SHORT",
+        current_price=95000,
+        original_tp1=93000,
+        original_tp2=92000,
+        original_sl=95200, # Naive SL, too close
+        liq_zones=liq_zones
+    )
+    print(f"Current: 95000, Initial SL: 95200")
+    print(f"Adjusted SL: {result_s.adjusted_sl}")
+    print(f"Nearest Fuel Cluster: 96400-96600")
+    # Expect SL > 96600
 
 
 if __name__ == "__main__":
