@@ -1378,7 +1378,7 @@ class DecisionEngineV2:
                     if smart_result.strategy == EntryStrategy.WAIT_FOR_DIP:
                         strategy_text = f"⏳ Attendre ${smart_result.optimal_entry:,.0f} (+{smart_result.potential_improvement_pct:.0f}% R:R)"
                     else:
-                strategy_text = f"📝 Limite ${smart_result.optimal_entry:,.0f}"
+                        strategy_text = f"📝 Limite ${smart_result.optimal_entry:,.0f}"
                     reasons.append(strategy_text)
                     
             except Exception as e:
