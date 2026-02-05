@@ -457,14 +457,134 @@ class DecisionEngineV2:
             print(f"   🛡️ STRUCTURAL FILTER: Neutralizing score (Edge not clear)")
             adjusted_score = final_score
         
-        # 5. Déterminer la direction initiale (basée sur le score)
-        direction = self._determine_direction(dimension_scores)
+        # 5. Determine PROVISIONAL direction for penalty application
+        # If score > 50, we assume we are looking for LONG setups
+        # If score < 50, we assume we are looking for SHORT setups
+        provisional_direction = SignalDirection.LONG if adjusted_score >= 50 else SignalDirection.SHORT
         
-        # 6. Sélectionner le type de signal
-        signal_type = self._select_signal_type(dimension_scores, direction)
+        # ========== PHASE 1: INSTITUTIONAL GRADE FILTERS ==========
         
-        # 6a. CORRECTION: Force direction based on signal type logic
-        # Some signals have inherent direction that overrides the general score bias
+        # Filter 2: Downgrade signals with NEUTRAL consistency + declining confidence
+        if self.consistency_status == 'NEUTRAL' and self.consistency_score < -15:
+            # Downgrade score instead of setting NO_SIGNAL directly
+            adjusted_score -= 10
+            warnings.append("⚠️ Consistency Downgrade (-10)")
+        
+        # Filter 3: ADX Market Regime (UPDATED: RANGING = HIGH WR based on backtests)
+        # Backtest: ADX_RANGING = 70.6% WR on 1190 signals (N=17)
+        adx_regime = self.adx.get('regime', 'UNKNOWN')
+        if adx_regime == 'RANGING':
+            # NEW: Boost signals in ranging markets (mean reversion works better)
+            adjusted_score += 15
+            warnings.append(f"🎯 ADX Ranging = High WR Setup (+15 boost)")
+            
+        # ========== BLACKBOX OPTIMIZATION (Meta-Analysis 2026) ==========
+        # 1. Volatility Filter (High ATR = Death Zone)
+        # Backtest Delta: +17.8% Winrate when avoiding high ATR
+        current_atr = self.adx.get('atr', 0)
+        if current_atr > config.ATR_MAX_THRESHOLD:
+            # Exception: Unless Momentum is EXTREME (>80) to catch the breakout
+            mom_score = dimension_scores.get('technical', 50)
+            if mom_score < 80:
+                # Instead of blocking, apply massive penalty to ensure only STRONG signals pass
+                adjusted_score -= 25
+                warnings.append(f"⚠️ Haute Volatilité (ATR {current_atr:.0f} > {config.ATR_MAX_THRESHOLD}) - Pénalité Blackbox")
+
+        # 2. GEX Stability Boost (Positive Gamma = Safe Haven)
+        # Backtest Delta: +50% Winrate (100% WR on sample)
+        net_gex = self.derivatives.get('gex_profile', {}).get('net_gex_usd_m', 0)
+        if net_gex > 0:
+            adjusted_score += config.GEX_BOOST_VALUE
+            # Boost confidence for range trades
+            
+        # 3. Liquidation Magnet (Short Liqs = Upward Fuel)
+        # Correlation: +0.57 with WINS
+        nearest_short_liq_dist = self.liq_analysis.get('nearest_short_liq_distance_pct', 99) if self.liq_analysis else 99
+        if nearest_short_liq_dist < config.LIQUIDATION_NEAR_PCT:
+             # If signal is likely LONG, this is a magnet
+             if provisional_direction == SignalDirection.LONG:
+                 adjusted_score += 10
+                 # Validated by "Fuel" theory
+        
+        # ================================================================
+        
+        # Filter 4: HTF Alignment (Reduce confidence if trading against major trend)
+        htf_bias = self.htf.get('bias', 'NEUTRAL')
+        htf_penalty = 0
+        if htf_bias != 'NEUTRAL':
+            # Check alignment
+            is_long_signal = provisional_direction == SignalDirection.LONG
+            is_htf_bullish = htf_bias == 'BULLISH'
+            
+            if is_long_signal and not is_htf_bullish:
+                htf_penalty = 10  # Reduced from 20 to 10
+            elif not is_long_signal and is_htf_bullish:
+                htf_penalty = 10  # Reduced from 20 to 10
+                
+            adjusted_score -= htf_penalty
+        
+        # Filter 5: Confluence Check (Asymmetric thresholds)
+        # LONG: Require 2+ dimensions > 55
+        # SHORT: Require 2+ dimensions < 45 (looser threshold due to bullish bias in whale/macro data)
+        
+        bullish_dims = sum(1 for score in dimension_scores.values() if score > 55)
+        bearish_dims = sum(1 for score in dimension_scores.values() if score < 45)
+        
+        # Additional: Strong technical bearish (< 35) counts as 2 bearish dims
+        tech_score = dimension_scores.get('technical', 50)
+        if tech_score < 35:
+            bearish_dims += 1  # Bonus for strong technical bearish
+        
+        if provisional_direction == SignalDirection.LONG and bullish_dims < 2:
+            adjusted_score -= 20
+            warnings.append("⚠️ Weak Confluence (Long)")
+        elif provisional_direction == SignalDirection.SHORT and bearish_dims < 2:
+            adjusted_score -= 20
+            warnings.append("⚠️ Weak Confluence (Short)")
+        
+        # Filter 6: Macro Regime (Phase 2 - Cross-Asset)
+        macro_regime = self.cross_asset.get('overall_regime', 'MIXED')
+        
+        is_long_signal = provisional_direction == SignalDirection.LONG
+        macro_penalty = 0
+        
+        if macro_regime == 'RISK_OFF' and is_long_signal:
+            macro_penalty = 15  # Going long in risk-off environment
+        elif macro_regime == 'RISK_ON' and not is_long_signal:
+            macro_penalty = 15  # Going short in risk-on environment
+            
+        adjusted_score -= macro_penalty
+        
+        # Filter 8: Venturi Confirmation (R&D Logic)
+        # Prevent Shorting Macro Bullish dips unless Fluid Dynamics (Venturi) confirms breakdown
+        if provisional_direction == SignalDirection.SHORT:
+            tech_score = dimension_scores.get('technical', 50)
+            macro_score = dimension_scores.get('macro', 50)
+            
+            # Conflict: Technicals scream BEARISH (<35) but Macro says BULLISH (>55)
+            if tech_score < 35 and macro_score > 55:
+                # We need Venturi confirmation to proceed with SHORT
+                venturi_direction = self.venturi.get('direction', 'NEUTRAL')
+                breakout_prob = self.venturi.get('breakout_probability', 0)
+                
+                # If Venturi is not DOWN, we block the signal
+                is_venturi_bearish = (venturi_direction == 'DOWN' or 
+                                     (breakout_prob > 50 and venturi_direction == 'DOWN'))
+                
+                if not is_venturi_bearish:
+                    adjusted_score -= 15
+                    warnings.append(f"⚠️ Contre-tendance Macro ({macro_score}/100) sans confirmation Venturi")
+
+        # Cap Adjusted Score 0-100 BEFORE classification
+        adjusted_score = max(0, min(100, adjusted_score))
+
+        # 5. Determine FINAL Direction (based on modified score)
+        direction = self._determine_direction_from_score(adjusted_score)
+        
+        # 6. Select Signal Type (WITH FINAL SCORE)
+        signal_type = self._select_signal_type(dimension_scores, direction, adjusted_score)
+
+        # Force direction if signal type implies it (Sniper, Fade, etc)
         if signal_type == SignalType.FADE_HIGH:
             direction = SignalDirection.SHORT
         elif signal_type == SignalType.FADE_LOW:
@@ -485,139 +605,11 @@ class DecisionEngineV2:
             direction = SignalDirection.LONG # Squeeze UP implies LONG
         elif signal_type == SignalType.LONG_FLUSH:
             direction = SignalDirection.SHORT # Flush DOWN implies SHORT
-        
-        # 6b. QUALITY FILTERS (validated via backtesting: +6.2% WR, +$1590 P&L)
-        # NOTE: LONG_BREAKOUT filter removed - no longer generated in _select_signal_type
-        
-        # Filter 2: Downgrade signals with NEUTRAL consistency + declining confidence
-        if self.consistency_status == 'NEUTRAL' and self.consistency_score < -15:
-            # Check if it's a tradeable signal being downgraded
-            if signal_type not in [SignalType.NO_SIGNAL]:
-                signal_type = SignalType.NO_SIGNAL
-                direction = SignalDirection.NEUTRAL
-        
-        # ========== PHASE 1: INSTITUTIONAL GRADE FILTERS ==========
-        
-        # Filter 3: ADX Market Regime (UPDATED: RANGING = HIGH WR based on backtests)
-        # Backtest: ADX_RANGING = 70.6% WR on 1190 signals (N=17)
-        adx_regime = self.adx.get('regime', 'UNKNOWN')
-        if adx_regime == 'RANGING' and signal_type not in [SignalType.NO_SIGNAL]:
-            # NEW: Boost signals in ranging markets (mean reversion works better)
-            adjusted_score += 15
-            warnings.append(f"🎯 ADX Ranging = High WR Setup (+15 boost)")
-            
-        # ========== BLACKBOX OPTIMIZATION (Meta-Analysis 2026) ==========
-        # 1. Volatility Filter (High ATR = Death Zone)
-        # Backtest Delta: +17.8% Winrate when avoiding high ATR
-        current_atr = self.adx.get('atr', 0)
-        if current_atr > config.ATR_MAX_THRESHOLD and signal_type not in [SignalType.NO_SIGNAL]:
-            # Exception: Unless Momentum is EXTREME (>80) to catch the breakout
-            mom_score = dimension_scores.get('technical', 50)
-            if mom_score < 80:
-                # Instead of blocking, apply massive penalty to ensure only STRONG signals pass
-                adjusted_score -= 25
-                warnings.append(f"⚠️ Haute Volatilité (ATR {current_atr:.0f} > {config.ATR_MAX_THRESHOLD}) - Pénalité Blackbox")
 
-        # 2. GEX Stability Boost (Positive Gamma = Safe Haven)
-        # Backtest Delta: +50% Winrate (100% WR on sample)
-        net_gex = self.derivatives.get('gex_profile', {}).get('net_gex_usd_m', 0)
-        if net_gex > 0:
-            adjusted_score += config.GEX_BOOST_VALUE
-            # Boost confidence for range trades
-            
-        # 3. Liquidation Magnet (Short Liqs = Upward Fuel)
-        # Correlation: +0.57 with WINS
-        nearest_short_liq_dist = self.liq_analysis.get('nearest_short_liq_distance_pct', 99) if self.liq_analysis else 99
-        if nearest_short_liq_dist < config.LIQUIDATION_NEAR_PCT:
-             # If signal is LONG, this is a magnet
-             if direction == SignalDirection.LONG:
-                 adjusted_score += 10
-                 # Validated by "Fuel" theory
-        
-        # ================================================================
-        
-        # Filter 4: HTF Alignment (Reduce confidence if trading against major trend)
-        htf_bias = self.htf.get('bias', 'NEUTRAL')
-        htf_penalty = 0
-        if htf_bias != 'NEUTRAL' and signal_type not in [SignalType.NO_SIGNAL]:
-            # Check alignment
-            is_long_signal = direction == SignalDirection.LONG
-            is_htf_bullish = htf_bias == 'BULLISH'
-            
-            if is_long_signal and not is_htf_bullish:
-                htf_penalty = 10  # Reduced from 20 to 10
-            elif not is_long_signal and is_htf_bullish:
-                htf_penalty = 10  # Reduced from 20 to 10
-                
-            adjusted_score -= htf_penalty
-        
-        # Filter 5: Confluence Check (Asymmetric thresholds)
-        # LONG: Require 2+ dimensions > 55
-        # SHORT: Require 2+ dimensions < 45 (looser threshold due to bullish bias in whale/macro data)
-        if signal_type not in [SignalType.NO_SIGNAL]:
-            bullish_dims = sum(1 for score in dimension_scores.values() if score > 55)
-            bearish_dims = sum(1 for score in dimension_scores.values() if score < 45)
-            
-            # Additional: Strong technical bearish (< 35) counts as 2 bearish dims
-            tech_score = dimension_scores.get('technical', 50)
-            if tech_score < 35:
-                bearish_dims += 1  # Bonus for strong technical bearish
-            
-            if direction == SignalDirection.LONG and bullish_dims < 2: # Reduced from 3 to 2
-                signal_type = SignalType.NO_SIGNAL
-                direction = SignalDirection.NEUTRAL
-            elif direction == SignalDirection.SHORT and bearish_dims < 2:  # Reduced from 3 to 2
-                signal_type = SignalType.NO_SIGNAL
-                direction = SignalDirection.NEUTRAL
-        
-        # Filter 6: Macro Regime Check (Phase 2 - Cross-Asset)
-        macro_regime = self.cross_asset.get('overall_regime', 'MIXED')
-        macro_btc_impact = self.cross_asset.get('regime_btc_impact', 'NEUTRAL')
-        macro_penalty = 0
-        
-        if signal_type not in [SignalType.NO_SIGNAL]:
-            is_long_signal = direction == SignalDirection.LONG
-            
-            if macro_regime == 'RISK_OFF' and is_long_signal:
-                macro_penalty = 15  # Going long in risk-off environment
-            elif macro_regime == 'RISK_ON' and not is_long_signal and direction != SignalDirection.NEUTRAL:
-                macro_penalty = 15  # Going short in risk-on environment
-                
-            adjusted_score -= macro_penalty
-        
-        # Filter 8: Venturi Confirmation (R&D Logic)
-        # Prevent Shorting Macro Bullish dips unless Fluid Dynamics (Venturi) confirms breakdown
-        if direction == SignalDirection.SHORT and signal_type not in [SignalType.NO_SIGNAL]:
-            tech_score = dimension_scores.get('technical', 50)
-            macro_score = dimension_scores.get('macro', 50)
-            
-            # Conflict: Technicals scream BEARISH (<35) but Macro says BULLISH (>55)
-            if tech_score < 35 and macro_score > 55:
-                # We need Venturi confirmation to proceed with SHORT
-                venturi_direction = self.venturi.get('direction', 'NEUTRAL')
-                breakout_prob = self.venturi.get('breakout_probability', 0)
-                
-                # If Venturi is not DOWN, we block the signal
-                is_venturi_bearish = (venturi_direction == 'DOWN' or 
-                                     (breakout_prob > 50 and venturi_direction == 'DOWN'))
-                
-                
-                if not is_venturi_bearish:
-                    # Convert BLOCK to PENALTY
-                    # signal_type = SignalType.NO_SIGNAL
-                    # direction = SignalDirection.NEUTRAL
-                    adjusted_score -= 15
-                    warnings.append(f"⚠️ Contre-tendance Macro ({macro_score}/100) sans confirmation Venturi")
-        
         # Filter 9: Boost Contrarian Signals (Valid Reversals)
-        # Standard Sentiment weight is low (3-10%). Score often stuck at ~50.
-        # If we have a VALID Contrarian Signal (passed all checks in select_signal_type), it deserves a boost.
+        # Since we passed adjusted_score, this boost is just to help it clear final thresholds if it survived
         if signal_type in [SignalType.CONTRARIAN_BUY, SignalType.CONTRARIAN_SELL]:
-            # Boost to ensure it crosses the notification threshold (usually 60)
-            # Only boost if not already penalized heavily
-            if adjusted_score > 40:
-                adjusted_score += 15
-                warnings.append(f"🚀 Sentiment Extreme ({self.sentiment.get('fear_greed', {}).get('value')} FG) -> Boost Contrarian")
+             warnings.append(f"🚀 Sentiment Extreme ({self.sentiment.get('fear_greed', {}).get('value')} FG) -> Signal Validé")
 
         if self.event.get('event_active') and signal_type not in [SignalType.NO_SIGNAL]:
             event_penalty = self.event.get('confidence_penalty', 30)
@@ -1105,25 +1097,24 @@ class DecisionEngineV2:
         
         return penalty
     
-    def _determine_direction(self, scores: Dict[str, float]) -> SignalDirection:
-        """Détermine la direction globale (Basée sur le score pondéré)"""
-        # Utiliser le score composite (pondéré) s'il est disponible via _calculate_composite_score
-        # Pour éviter de recalculer, on refait le calcul rapide ici ou on change la signature
-        # Option simple: Recalculer le weighted score localement
-        
-        _, weighted_scores = self._calculate_composite_score(scores)
-        weighted_sum = sum(weighted_scores.values())
-        
-        # Le weighted_sum est déjà le score composite (0-100)
-        
-        if weighted_sum >= 55:
+
+    def _determine_direction_from_score(self, score: float) -> SignalDirection:
+        """Détermine la direction globale (Basée sur le score composite)"""
+        if score >= 55:
             return SignalDirection.LONG
-        elif weighted_sum <= 45:
+        elif score <= 45:
             return SignalDirection.SHORT
         else:
             return SignalDirection.NEUTRAL
+            
+    def _determine_direction(self, scores: Dict[str, float]) -> SignalDirection:
+        """ Legacy wrapper """
+        _, weighted_scores = self._calculate_composite_score(scores)
+        weighted_sum = sum(weighted_scores.values())
+        return self._determine_direction_from_score(weighted_sum)
+
     
-    def _select_signal_type(self, scores: Dict[str, float], direction: SignalDirection) -> SignalType:
+    def _select_signal_type(self, scores: Dict[str, float], direction: SignalDirection, composite_score: float) -> SignalType:
         """Sélectionne le type de signal le plus approprié"""
         # Vérifier les signaux Quantum en premier (haute priorité)
         entropy_signals = self.entropy.get('signals', {})
@@ -1204,11 +1195,9 @@ class DecisionEngineV2:
             elif slope_1d < -50: # Strong bearish acceleration daily
                 pass # Block
             # 3. Score Alignment Check (Panic Sell vs Reversal)
-            # If technical score is LOW (< 45), this is NOT a reversal, it's a breakdown (Panic Sell)
-            _, weighted_scores = self._calculate_composite_score(scores)
-            composite = sum(weighted_scores.values())
+            # USES ADJUSTED SCORE NOW
             
-            if composite < 45:
+            if composite_score < 45:
                 # Panic Sell scenario: Fear is high AND Score is Bearish -> Continue Dumping
                 return SignalType.SHORT_BREAKOUT
             else:
@@ -1225,10 +1214,8 @@ class DecisionEngineV2:
                 pass # Block
             # 3. Score Alignment Check (FOMO Buy vs Reversal)
             else:
-                _, weighted_scores = self._calculate_composite_score(scores)
-                composite = sum(weighted_scores.values())
-                
-                if composite > 55:
+                # USES ADJUSTED SCORE NOW
+                if composite_score > 55:
                     # FOMO Buy scenario: Greed is high AND Score is Bullish -> Continue Pumping
                     return SignalType.LONG_BREAKOUT
                 else:
@@ -1247,10 +1234,6 @@ class DecisionEngineV2:
         # ========================================================
         # Score > 55 (Bullish) MAIS OI Chute (Long Flush) -> Buy the dip
         # Score < 45 (Bearish) MAIS OI Chute (Short Squeeze/Cover) -> Sell the rip
-        
-        # 1. Obtenir le score pondéré (recalcul local pour être sûr)
-        _, weighted_scores_dict = self._calculate_composite_score(scores)
-        composite_score = sum(weighted_scores_dict.values())
         
         # 2. Obtenir le changement d'OI (1H)
         # self.oi contient désormais le résultat complet de l'analyseur (si mode full)
