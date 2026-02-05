@@ -353,7 +353,8 @@ def run_scheduled_analysis() -> Dict[str, Any]:
             'FADE_LOW', 
             'LONG_SNIPER', 'SHORT_SNIPER',
             'SHORT_BREAKOUT',
-            'QUANTUM_BUY', 'QUANTUM_SELL' # Nouveaux signaux forts
+            'QUANTUM_BUY', 'QUANTUM_SELL', # Nouveaux signaux forts
+            'CONTRARIAN_BUY', 'CONTRARIAN_SELL' # Signaux Sentiment Extrême
         ]
         # LONG_BREAKOUT retiré car 0% WR confirmé
         
