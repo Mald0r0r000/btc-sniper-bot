@@ -18,6 +18,7 @@ import config
 from analyzers.liquidation_zones import LiquidationZoneAnalyzer
 from momentum_analyzer import MomentumAnalyzer, MomentumStrength
 from smart_entry import SmartEntryAnalyzer, EntryStrategy
+from analyzers.kalman import KalmanFilter1D
 
 
 
@@ -297,6 +298,23 @@ class DecisionEngineV2:
         
         # MACD 3D data
         self.macd = macd_data or {}
+        
+        # Kalman Filter (Zero Lag Trend)
+        self.kf = KalmanFilter1D() # Uses default optimized params (Q=0.05, R=0.1)
+        self.kalman_price = current_price
+        self.kalman_velocity = 0.0
+        
+        # Warmup Kalman with 5m history if available
+        if self.candles_5m:
+            for c in self.candles_5m[-50:]: # Use last 50 candles for warmup
+                try:
+                    close_p = float(c.get('close', 0))
+                    if close_p > 0:
+                        self.kalman_price, self.kalman_velocity = self.kf.update(close_p)
+                except:
+                    pass
+            # Final update with current price to be up-to-the-second
+            self.kalman_price, self.kalman_velocity = self.kf.update(self.price)
     
     def _load_adaptive_weights(self) -> Dict[str, int]:
         """
@@ -616,6 +634,22 @@ class DecisionEngineV2:
             adjusted_score -= event_penalty
             # Event warning will be added in _build_composite_signal
         
+        # Filter 10: Zero-Lag Reversal Veto (Kalman + Structure)
+        # R&D: If Price Action contradicts signal direction significantly (V-Shape)
+        veto_active, veto_reason = self._check_reversal_veto(provisional_direction)
+        if veto_active:
+             print(f"   ⛔ REVERSAL VETO: {veto_reason}")
+             adjusted_score = 50 # Force Neutral
+             warnings.append(f"⛔ Reversal Veto: {veto_reason}")
+        
+        # Filter 10: Zero-Lag Reversal Veto (Kalman + Structure)
+        # R&D: If Price Action contradicts signal direction significantly (V-Shape)
+        veto_active, veto_reason = self._check_reversal_veto(provisional_direction)
+        if veto_active:
+             print(f"   ⛔ REVERSAL VETO: {veto_reason}")
+             adjusted_score = 50 # Force Neutral
+             warnings.append(f"⛔ Reversal Veto: {veto_reason}")
+
         # ========== PREMIUM EXPLOSIVE COMBO (Backtested 80%+ WR) ==========
         # Based on analysis of 1190 signals - highest WR combos:
         # 1. VP_ROTATION_DOWN + CVD_BEARISH @ 05-06 UTC = 81-92% WR
@@ -1664,7 +1698,11 @@ class DecisionEngineV2:
             'manipulation_risk': self.spoofing.get('risk_level', 'UNKNOWN'),
             'vp_context': self.vp.get('context', 'NEUTRAL'),
             'quantum_state': self.entropy.get('quantum_state', 'UNKNOWN'),
-            'fear_greed': self.sentiment.get('fear_greed', {}).get('value', 50)
+            'fear_greed': self.sentiment.get('fear_greed', {}).get('value', 50),
+            # Kalman Filter Data
+            'kalman_price': round(self.kalman_price, 2),
+            'kalman_velocity': round(self.kalman_velocity, 2),
+            'kalman_veto': self._check_reversal_veto(SignalDirection.SHORT)[0] or self._check_reversal_veto(SignalDirection.LONG)[0]
         }
     
     def _apply_structural_quality_filter(self, score: float) -> float:
@@ -1689,6 +1727,8 @@ class DecisionEngineV2:
                 return 50.0 # Don't gamble on the gap without momentum
                 
         return score
+
+
 
     def _get_signal_strength(self, score: float) -> str:
         """Retourne la force du signal (Bi-directionnel)"""
@@ -1750,3 +1790,25 @@ class DecisionEngineV2:
         except Exception as e:
             print(f"⚠️ Error in Smart Entry Analysis: {e}")
             return None
+            
+    def _check_reversal_veto(self, direction: SignalDirection) -> Tuple[bool, str]:
+        """Check for Zero-Lag reversal signs (Kalman / Structure)"""
+        # 1. Kalman Trend Check
+        # If Signal SHORT but Price > Kalman (Trend is UP)
+        if direction == SignalDirection.SHORT:
+            # If Price is above Kalman Trend AND Velocity is positive (Momentum Up)
+            if self.price > self.kalman_price * 1.0002: # tiny buffer 0.02%
+                 # Only veto if velocity is not crashing down hard (i.e. we are not catching a falling knife that just bounced)
+                 if self.kalman_velocity > -5: 
+                     return True, f"Price ({self.price}) > Kalman Trend ({self.kalman_price:.1f})"
+                
+        elif direction == SignalDirection.LONG:
+            # If Price is below Kalman Trend AND Velocity is negative (Momentum Down)
+            if self.price < self.kalman_price * 0.9998:
+                if self.kalman_velocity < 5:
+                     return True, f"Price ({self.price}) < Kalman Trend ({self.kalman_price:.1f})"
+                     
+        # 2. Structure Veto (Fractal Break)
+        # We can implement this later if needed. Kalman seems sufficient for now.
+        
+        return False, ""

@@ -120,6 +120,12 @@ class CVDAnalyzer:
 
             trend, score = self._calculate_trend_score(agg_ratio)
             
+            # R&D: Absorption Override
+            # If sellers are absorbing (High Sell Vol + Price Stable), neutralize bearishness
+            if is_absorption and trend == 'BEARISH':
+                trend = 'NEUTRAL'
+                score = 55 # Slight bullish bias (short squeeze potential)
+            
             mtf_data['5m'] = {
                 'net_cvd': round(net_cvd, 4),
                 'buy_volume': round(buy_vol, 4),
@@ -289,6 +295,11 @@ class CVDAnalyzer:
             agg_ratio = 1.0
 
         trend, score = self._calculate_trend_score(agg_ratio)
+
+        # R&D: Absorption Override
+        if is_absorption and trend == 'BEARISH':
+            trend = 'NEUTRAL'
+            score = 55
         
         return {
             'net_cvd': round(net_cvd_accum, 4),

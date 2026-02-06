@@ -156,7 +156,11 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 "sb": market_ctx.get("structure_bias"),
                 "db": market_ctx.get("derivatives_bias"),
                 "stb": market_ctx.get("sentiment_bias"),
-                "mb": market_ctx.get("macro_bias")
+                "mb": market_ctx.get("macro_bias"),
+                # Kalman
+                "kp": market_ctx.get("kalman_price"),
+                "kv": market_ctx.get("kalman_velocity"),
+                "kve": market_ctx.get("kalman_veto")
             },
             "con": {  # consistency
                 "st": consistency_result.get("status"),

@@ -34,6 +34,7 @@ class GoogleSheetDataStore:
         
         # --- Deep Alpha ---
         "Quantum_State", "VP_Context", "Risk_Env", "Fear_Greed",
+        "Kalman_Price", "Kalman_Velocity", "Kalman_Veto", # ADDED: Kalman
         
         # --- Fluid Dynamics ---
         "Fluid_Venturi_Score", "Fluid_Compression_Detected", "Fluid_Direction", "Fluid_Breakout_Prob",
@@ -177,6 +178,7 @@ class GoogleSheetDataStore:
             
             # --- Context ---
             ctx.get("qs"), ctx.get("vpc"), ctx.get("re"), ctx.get("fg"),
+            ctx.get("kp"), ctx.get("kv"), ctx.get("kve"), # ADDED: Kalman
             
             # --- Fluid ---
             fd_v.get("cs"), fd_v.get("cd"), fd_v.get("dir"), fd_v.get("bp"),
