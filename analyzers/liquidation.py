@@ -184,5 +184,6 @@ class LiquidationAnalyzer:
             "nearest_long_liq": {"price": 0, "distance_pct": 0, "intensity": 0},
             "nearest_short_liq": {"price": 0, "distance_pct": 0, "intensity": 0},
             "total_long_liqs_est": 0,
-            "total_short_liqs_est": 0
+            "total_short_liqs_est": 0,
+            "clusters_json": {"longs": [], "shorts": []}
         }

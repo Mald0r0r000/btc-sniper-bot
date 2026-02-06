@@ -6,7 +6,7 @@ Calculates optimal entry points by analyzing liquidation zones to avoid stop hun
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
-import numpy as np
+
 
 # Import MTF fractal zone detection
 from smart_entry_mtf import FractalZoneDetector, MTFMACDZoneSelector
@@ -492,62 +492,78 @@ class SmartEntryAnalyzer:
     ) -> Tuple[Optional[float], str]:
         """
         Find a safe "shadow" zone for SL placement.
-        
-        Strategy:
-        1. Identify "Fuel" clusters (Opposite Liquidations)
-           - LONG: Long Liqs below price (Market wants to grab these before going up)
-           - SHORT: Short Liqs above price (Market wants to grab these before going down)
-        2. Place SL BEHIND these fuel clusters (Liquidity Shadowing)
-        3. Fallback: Structural Swing Points
         """
         shadow_price = None
         reason = "Default"
         
         # 1. Analyze Liquidation Clusters (Fuel)
+        # Note: liq_zones structure from LiquidationAnalyzer is:
+        # { 'clusters_json': { 'longs': [...], 'shorts': [...] } }
+        
         clusters = []
+        clusters_data = liq_zones.get('clusters_json', {}) if liq_zones else {}
+        
         if direction == "LONG":
             # For LONG, we fear the dip that grabs liquidity below
-            clusters = liq_zones.get('clusters_below', []) if liq_zones else []
-            # Filter for clusters that look like fuel (Longs getting rekt)
-            # Or simplified: any cluster below is support/fuel
+            # So we look for Long Liquidation Clusters
+            clusters = clusters_data.get('longs', [])
         else:
             # For SHORT, we fear the pump that grabs liquidity above
-            clusters = liq_zones.get('clusters_above', []) if liq_zones else []
+            # So we look for Short Liquidation Clusters
+            clusters = clusters_data.get('shorts', [])
             
         if clusters:
-            # Find the strongest nearby cluster to hide behind
-            # We want the nearest significant cluster
-            valid_clusters = [c for c in clusters if c['strength'] >= 2] # Min strength
+            # Sort by proximity to current price
+            # clusters are usually sorted by intensity, but let's be sure we get the nearest relevant one
+            sorted_clusters = sorted(clusters, key=lambda c: abs(c['price'] - current_price))
+            
+            # Filter for clusters that are effectively "fuel" (not too far)
+            valid_clusters = [c for c in sorted_clusters if c.get('intensity', 0) >= 1] 
             
             if valid_clusters:
-                # Take the first one (nearest)
                 nearest_cluster = valid_clusters[0]
-                cluster_edge = nearest_cluster['min_price'] if direction == "LONG" else nearest_cluster['max_price']
+                cluster_price = nearest_cluster['price']
                 
-                # Set Shadow Price
-                # LONG: Below the cluster min
-                # SHORT: Above the cluster max
-                shadow_price = cluster_edge
-                reason = f"Shadowing Liq Cluster (${nearest_cluster['center_price']:,.0f})"
+                # Logic: The "Zone" is roughly price +/- 0.5%? 
+                # The analyzer returns a center price. 
+                # We assume the cluster spans a bit around the center.
+                # Let's infer the edge safely.
+                
+                if direction == "LONG":
+                    # Shadow is BELOW the cluster.
+                    # Assuming cluster width of ~0.3% to be safe if not provided
+                    shadow_price = cluster_price * 0.997 
+                    # Ensure shadow is actually BELOW current price
+                    if shadow_price >= current_price:
+                         shadow_price = current_price * 0.995 # Fallback
+                else:
+                    # Shadow is ABOVE the cluster.
+                    shadow_price = cluster_price * 1.003
+                    if shadow_price <= current_price:
+                         shadow_price = current_price * 1.005 # Fallback
+                         
+                reason = f"Shadowing Liq Cluster (${cluster_price:,.0f})"
                 return shadow_price, reason
 
         # 2. Fallback: Structural Swings (Fractals)
         if candles and len(candles) >= 20:
             if direction == "LONG":
-                # Find recent significant low
-                lows = [c.get('low', c.get('l', float('inf'))) for c in candles[-30:]]
-                swing_low = min(lows)
-                # Ensure it's not too close (noise)
-                if (current_price - swing_low) / current_price > 0.002: # 0.2% min distance for structure
-                    shadow_price = swing_low
-                    reason = "Shadowing Swing Low"
+                # Find recent significant low in last 30 candles
+                lows = [float(c.get('low', c.get('l', float('inf')))) for c in candles[-30:]]
+                if lows:
+                    swing_low = min(lows)
+                    # Ensure it's not too close (noise)
+                    if (current_price - swing_low) / current_price > 0.002: # 0.2% min distance for structure
+                        shadow_price = swing_low
+                        reason = "Shadowing Swing Low"
             else:
                 # Find recent significant high
-                highs = [c.get('high', c.get('h', 0)) for c in candles[-30:]]
-                swing_high = max(highs)
-                if (swing_high - current_price) / current_price > 0.002:
-                    shadow_price = swing_high
-                    reason = "Shadowing Swing High"
+                highs = [float(c.get('high', c.get('h', 0))) for c in candles[-30:]]
+                if highs:
+                    swing_high = max(highs)
+                    if (swing_high - current_price) / current_price > 0.002:
+                        shadow_price = swing_high
+                        reason = "Shadowing Swing High"
                     
         return shadow_price, reason
 
@@ -564,43 +580,65 @@ class SmartEntryAnalyzer:
         Calculate a safe SL using Liquidity Shadowing.
         Overrides any initial naive SL if a better shadow zone is found.
         """
+        if current_price is None:
+            current_price = entry_price
+
         # 1. Try to find a Shadow Zone
-        shadow_price, reason = self._find_shadow_zone(direction, entry_price, liq_zones, candles)
+        shadow_price, reason = self._find_shadow_zone(direction, current_price, liq_zones, candles)
         
         adjusted_sl = initial_sl
         justification = "Standard SL"
         
+        # Buffer config
+        shadow_buffer = 0.0035 # 0.35% buffer behind the wall
+        min_dist_pct = 0.006   # 0.6% absolute minimum distance
+        max_dist_pct = 0.08    # 8% maximum SL distance (Equity protection)
+
         if shadow_price:
-            # Apply buffer to the shadow price
-            # We use a small buffer just to ensure we are "behind" the wall
-            shadow_buffer = 0.003 # 0.3% buffer
-            
             if direction == "LONG":
                 shadow_sl = shadow_price * (1 - shadow_buffer)
-                # Logic: Use the LOWER of initial_sl or shadow_sl?
-                # Actually, we want the SAFER one. Deepest one.
-                # But we also want to avoid huge stops.
-                # Let's trust the shadow strategy: ALWAYS hide behind the structure/liq.
+                # Use shadow SL, but check constraints
                 adjusted_sl = shadow_sl
             else:
                 shadow_sl = shadow_price * (1 + shadow_buffer)
                 adjusted_sl = shadow_sl
                 
-            justification = f"Shadow Strategy: {reason} (+0.3% buffer)"
+            justification = f"Shadow Strategy: {reason}"
         else:
-            # Fallback: Enforce minimum distance to avoid spread kills
-            min_dist = 0.006 # 0.6% minimum distance if no structure found
-            
+            # Fallback if no shadow zone found: Use Min Distance
             if direction == "LONG":
-                min_sl = entry_price * (1 - min_dist)
-                if initial_sl > min_sl: # Initial SL is too close
-                     adjusted_sl = min_sl
-                     justification = "Enforced Min Distance (0.6%)"
+                adjusted_sl = entry_price * (1 - min_dist_pct)
             else:
-                min_sl = entry_price * (1 + min_dist)
-                if initial_sl < min_sl: # Initial SL is too close
-                     adjusted_sl = min_sl
-                     justification = "Enforced Min Distance (0.6%)"
+                adjusted_sl = entry_price * (1 + min_dist_pct)
+            justification = "Min Distance (No Shadow Found)"
+
+        # === SAFETY ENFORCEMENT ===
+        
+        # 1. Enforce Minimum Distance (Spread/Noise protection)
+        if direction == "LONG":
+            min_sl_price = entry_price * (1 - min_dist_pct)
+            if adjusted_sl > min_sl_price: # SL is too high (too close)
+                adjusted_sl = min_sl_price
+                justification += " (+Min Dist Enforced)"
+        else:
+            min_sl_price = entry_price * (1 + min_dist_pct)
+            if adjusted_sl < min_sl_price: # SL is too low (too close)
+                adjusted_sl = min_sl_price
+                justification += " (+Min Dist Enforced)"
+
+        # 2. Enforce Maximum Distance (Equity protection / R:R sanity)
+        # If SL is too far, we might want to cap it or invalidate the trade.
+        # Here we just cap it to maintain sanity.
+        if direction == "LONG":
+            max_sl_price = entry_price * (1 - max_dist_pct)
+            if adjusted_sl < max_sl_price: # SL is too low (too far)
+                adjusted_sl = max_sl_price
+                justification += " (Max Dist Cap)"
+        else:
+            max_sl_price = entry_price * (1 + max_dist_pct)
+            if adjusted_sl > max_sl_price: # SL is too high (too far)
+                adjusted_sl = max_sl_price
+                justification += " (Max Dist Cap)"
 
         return round(adjusted_sl, 1), justification
 
