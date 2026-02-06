@@ -636,15 +636,7 @@ class DecisionEngineV2:
         
         # Filter 10: Zero-Lag Reversal Veto (Kalman + Structure)
         # R&D: If Price Action contradicts signal direction significantly (V-Shape)
-        veto_active, veto_reason = self._check_reversal_veto(provisional_direction)
-        if veto_active:
-             print(f"   ⛔ REVERSAL VETO: {veto_reason}")
-             adjusted_score = 50 # Force Neutral
-             warnings.append(f"⛔ Reversal Veto: {veto_reason}")
-        
-        # Filter 10: Zero-Lag Reversal Veto (Kalman + Structure)
-        # R&D: If Price Action contradicts signal direction significantly (V-Shape)
-        veto_active, veto_reason = self._check_reversal_veto(provisional_direction)
+        veto_active, veto_reason = self._check_reversal_veto(direction)
         if veto_active:
              print(f"   ⛔ REVERSAL VETO: {veto_reason}")
              adjusted_score = 50 # Force Neutral
