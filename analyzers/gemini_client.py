@@ -56,26 +56,39 @@ class GeminiClient:
             }
         }
         
-        try:
-            req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers, method='POST')
-            with urllib.request.urlopen(req, timeout=30) as response:
-                if response.status == 200:
-                    raw_data = response.read()
-                    # Debug print
-                    # print(f"DEBUG: Read {len(raw_data)} bytes from API")
-                    data = json.loads(raw_data.decode('utf-8'))
-                    try:
-                        text = data['candidates'][0]['content']['parts'][0]['text']
-                        return {"text": text}
-                    except (KeyError, IndexError):
-                        return {"error": "Unexpected response structure", "raw": data}
-                else:
-                    return {"error": f"API Error {response.status}", "raw": response.read().decode('utf-8')}
+        max_retries = 3
+        current_retry = 0
+        
+        while current_retry <= max_retries:
+            try:
+                req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers, method='POST')
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    if response.status == 200:
+                        raw_data = response.read()
+                        data = json.loads(raw_data.decode('utf-8'))
+                        try:
+                            text = data['candidates'][0]['content']['parts'][0]['text']
+                            return {"text": text}
+                        except (KeyError, IndexError):
+                            return {"error": "Unexpected response structure", "raw": data}
+                    else:
+                        return {"error": f"API Error {response.status}", "raw": response.read().decode('utf-8')}
+                    
+            except urllib.error.HTTPError as e:
+                # Handle Rate Limit (429)
+                if e.code == 429:
+                    if current_retry < max_retries:
+                        delay = (2 ** current_retry) + 1  # 2s, 3s, 5s...
+                        print(f"⚠️ Gemini API 429 Rate Limit. Retrying in {delay}s... (Attempt {current_retry+1}/{max_retries})")
+                        time.sleep(delay)
+                        current_retry += 1
+                        continue
+                    else:
+                        return {"error": f"API Rate Limit Exceeded (429) after {max_retries} retries", "raw": e.read().decode('utf-8')}
                 
-        except urllib.error.HTTPError as e:
-            return {"error": f"HTTP Error {e.code}: {e.reason}", "raw": e.read().decode('utf-8'), "url": url}
-        except Exception as e:
-            return {"error": f"Request Failed: {e}"}
+                return {"error": f"HTTP Error {e.code}: {e.reason}", "raw": e.read().decode('utf-8'), "url": url}
+            except Exception as e:
+                return {"error": f"Request Failed: {e}"}
 
     def analyze_market_context(self, context: dict) -> dict:
         """
