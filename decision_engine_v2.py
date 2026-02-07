@@ -728,9 +728,32 @@ class DecisionEngineV2:
                     "momentum_score": dimension_scores.get('technical', 50),
                     "kdj_j": self.kdj.get('values', {}).get('j', 'N/A'),
                     "adx": self.adx.get('adx', 'N/A'),
-                    "macd_trend": self.macd.get('trend', 'N/A')
+                    "macd_trend": self.macd.get('trend', 'N/A'),
+                    "kalman": {
+                        "price": self.kalman_price,
+                        "velocity": self.kalman_velocity,
+                        "veto": self._check_reversal_veto(direction)[0]
+                    },
+                    "venturi": {
+                        "score": self.venturi.get('score', 50),
+                        "compression": self.venturi.get('compression_detected', False),
+                        "direction": self.venturi.get('direction', 'NEUTRAL')
+                    }
                 },
-                "sentiment": self.sentiment.get('fear_greed', {})
+                "structure": {
+                     "fvg_proximity": self.fvg.get('nearest_bull', {}).get('distance_pct') or self.fvg.get('nearest_bear', {}).get('distance_pct'),
+                     "order_book_imbalance": self.ob.get('imbalance_ratio', 1.0)
+                },
+                "institutional": {
+                     "net_gex": self.derivatives.get('gex_profile', {}).get('net_gex_usd_m', 0),
+                     "gex_regime": self.derivatives.get('gex_profile', {}).get('regime', 'UNKNOWN'),
+                     "whale_long_ratio": self.hyperliquid.get('long_ratio_pct', 50),
+                     "funding_rate": self.multi_ex.get('funding_divergence', 0)
+                },
+                "sentiment": {
+                    "fear_greed": self.sentiment.get('fear_greed', {}).get('value', 50),
+                    "risk_env": self.vp.get('risk_env', 'N/A')
+                }
             }
             
             # Non-blocking call ideally, but here synchronous (max 5-10s delay on entry)
