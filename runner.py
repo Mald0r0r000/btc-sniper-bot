@@ -337,7 +337,14 @@ def run_scheduled_analysis() -> Dict[str, Any]:
                 "lz": signal.get("smart_entry", {}).get("liq_zone"),  # liq_zone
                 "rr": signal.get("smart_entry", {}).get("rr_improvement"),  # rr_improvement
                 "to": signal.get("smart_entry", {}).get("timeout_hours")  # timeout_hours
-            } if signal.get("smart_entry") else None
+            } if signal.get("smart_entry") else None,
+            # AI Analysis (Gemini)
+            "ai": {
+                "r": signal.get("ai_analysis", {}).get("risk_assessment"), # Risk
+                "v": signal.get("ai_analysis", {}).get("veto"), # Veto
+                "s": signal.get("ai_analysis", {}).get("sentiment_score"), # Sentiment
+                "rs": signal.get("ai_analysis", {}).get("reason") # Reason
+            } if signal.get("ai_analysis") else None
         }
         data_store.save_signal(signal_record)
         

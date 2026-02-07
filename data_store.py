@@ -76,7 +76,10 @@ class GoogleSheetDataStore:
         "OI_Total", "OI_Delta_1h", "OI_Delta_24h", # ADDED: 24h
         
         # --- Macro Raw ---
-        "Macro_DXY", "Macro_SPX", "Macro_M2" # ADDED: Macro Raw
+        "Macro_DXY", "Macro_SPX", "Macro_M2", # ADDED: Macro Raw
+        
+        # --- AI Analysis ---
+        "AI_Risk", "AI_Veto", "AI_Sentiment", "AI_Reason"
     ]
 
     def __init__(self, sheet_id: str = None, credentials_json: str = None):
@@ -224,7 +227,10 @@ class GoogleSheetDataStore:
             oi.get("t"), oi.get("d1h"), oi.get("d24h"), # ADDED: 24h
             
             # --- Macro Raw ---
-            s.get("macro", {}).get("dxy"), s.get("macro", {}).get("spx"), s.get("macro", {}).get("m2", {}).get("v") # ADDED: Macro Raw
+            s.get("macro", {}).get("dxy"), s.get("macro", {}).get("spx"), s.get("macro", {}).get("m2", {}).get("v"), # ADDED: Macro Raw
+            
+            # --- AI Analysis ---
+            s.get("ai", {}).get("r"), s.get("ai", {}).get("v"), s.get("ai", {}).get("s"), s.get("ai", {}).get("rs") # ADDED: AI
         ]
 
     def save_signal(self, signal_record: Dict[str, Any]) -> bool:

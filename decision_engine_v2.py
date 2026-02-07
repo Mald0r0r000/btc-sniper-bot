@@ -19,6 +19,7 @@ from analyzers.liquidation_zones import LiquidationZoneAnalyzer
 from momentum_analyzer import MomentumAnalyzer, MomentumStrength
 from smart_entry import SmartEntryAnalyzer, EntryStrategy
 from analyzers.kalman import KalmanFilter1D
+from analyzers.gemini_client import GeminiClient
 
 
 
@@ -80,7 +81,9 @@ class CompositeSignal:
     warnings: List[str]
     dimension_scores: Dict[str, float]
     manipulation_penalty: float
+    manipulation_penalty: float
     smart_entry: Optional[Dict] = None  # Smart Entry recommendation
+    ai_analysis: Optional[Dict] = None  # AI R&D Analysis
     
     def to_dict(self) -> Dict[str, Any]:
         result = {
@@ -101,6 +104,10 @@ class CompositeSignal:
         # Add smart_entry if available
         if self.smart_entry:
             result['smart_entry'] = self.smart_entry
+            
+        # Add ai_analysis if available
+        if self.ai_analysis:
+            result['ai_analysis'] = self.ai_analysis
         
         return result
 
@@ -315,6 +322,9 @@ class DecisionEngineV2:
                     pass
             # Final update with current price to be up-to-the-second
             self.kalman_price, self.kalman_velocity = self.kf.update(self.price)
+            
+        # AI Analyst (Gemini) - Lazy loaded
+        self.gemini_client = GeminiClient()
     
     def _load_adaptive_weights(self) -> Dict[str, int]:
         """
@@ -697,13 +707,61 @@ class DecisionEngineV2:
             adjusted_score -= 20
             warnings.append(f"⚠️ Death Hours (21-23 UTC) - WR penalty applied")
         
+        # 7. AI Veto Check (Gemini) - R&D Phase 4
+        # Only check if we have a valid signal to avoid API spam
+        gemini_analysis = None
+        if signal_type != SignalType.NO_SIGNAL and abs(adjusted_score - 50) >= 10:
+            # Build minimal context for AI
+            ai_context = {
+                "timestamp": datetime.now().isoformat(),
+                "price": self.price,
+                "signal": {
+                    "type": signal_type.value,
+                    "direction": direction.value,
+                    "score": adjusted_score
+                },
+                "market_profile": {
+                    "vp_context": self.vp.get('context', 'N/A'),
+                    "risk_env": self.vp.get('risk_env', 'N/A')
+                },
+                "technical": {
+                    "rsi": 50, # Placeholder if not available
+                    "momentum_score": dimension_scores.get('technical', 50)
+                },
+                "sentiment": self.sentiment.get('fear_greed', {})
+            }
+            
+            # Non-blocking call ideally, but here synchronous (max 5-10s delay on entry)
+            # We accept this latency for "Sniper" bot which trades 5m candles (300s)
+            print(f"   🤖 Asking Gemini about {signal_type.value}...")
+            try:
+                gemini_analysis = self.gemini_client.analyze_market_context(ai_context)
+                
+                if gemini_analysis and not gemini_analysis.get('error'):
+                    # Check Veto
+                    if gemini_analysis.get('veto', False):
+                        print(f"   ⛔ GEMINI VETO: {gemini_analysis.get('reason')}")
+                        # Downgrade to NO_SIGNAL or apply massive penalty
+                        signal_type = SignalType.NO_SIGNAL
+                        adjusted_score = 50 # Neutralize
+                        warnings.append(f"⛔ AI VETO: {gemini_analysis.get('reason')}")
+                    else:
+                        print(f"   ✅ GEMINI APPROVED: {gemini_analysis.get('risk_assessment')}")
+                        reasons.append(f"🤖 AI: {gemini_analysis.get('risk_assessment')}")
+            except Exception as e:
+                print(f"   ⚠️ Gemini Analysis Failed: {e}")
+
         # 6c. Générer les détails du signal
         signal = self._build_composite_signal(
             signal_type, direction, raw_score, adjusted_score,
             dimension_scores, manipulation_penalty
         )
         
-        # 7. Contexte de marché
+        # Add AI analysis to signal object if available (custom attribute or inside feedback)
+        if gemini_analysis:
+            signal.ai_analysis = gemini_analysis
+
+        # 8. Contexte de marché
         market_context = self._build_market_context(dimension_scores)
         
         return {
