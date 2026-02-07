@@ -650,6 +650,7 @@ class DecisionEngineV2:
         if veto_active:
              print(f"   ⛔ REVERSAL VETO: {veto_reason}")
              adjusted_score = 50 # Force Neutral
+             signal_type = SignalType.NO_SIGNAL
              warnings.append(f"⛔ Reversal Veto: {veto_reason}")
 
         # ========== PREMIUM EXPLOSIVE COMBO (Backtested 80%+ WR) ==========
