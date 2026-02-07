@@ -725,8 +725,10 @@ class DecisionEngineV2:
                     "risk_env": self.vp.get('risk_env', 'N/A')
                 },
                 "technical": {
-                    "rsi": 50, # Placeholder if not available
-                    "momentum_score": dimension_scores.get('technical', 50)
+                    "momentum_score": dimension_scores.get('technical', 50),
+                    "kdj_j": self.kdj.get('values', {}).get('j', 'N/A'),
+                    "adx": self.adx.get('adx', 'N/A'),
+                    "macd_trend": self.macd.get('trend', 'N/A')
                 },
                 "sentiment": self.sentiment.get('fear_greed', {})
             }
