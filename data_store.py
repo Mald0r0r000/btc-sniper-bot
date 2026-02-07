@@ -230,7 +230,7 @@ class GoogleSheetDataStore:
             s.get("macro", {}).get("dxy"), s.get("macro", {}).get("spx"), s.get("macro", {}).get("m2", {}).get("v"), # ADDED: Macro Raw
             
             # --- AI Analysis ---
-            s.get("ai", {}).get("r"), s.get("ai", {}).get("v"), s.get("ai", {}).get("s"), s.get("ai", {}).get("rs") # ADDED: AI
+            (s.get("ai") or {}).get("r"), (s.get("ai") or {}).get("v"), (s.get("ai") or {}).get("s"), (s.get("ai") or {}).get("rs") # ADDED: AI
         ]
 
     def save_signal(self, signal_record: Dict[str, Any]) -> bool:
