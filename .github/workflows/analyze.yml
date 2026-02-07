@@ -55,6 +55,8 @@ jobs:
           # Google Sheets Blackbox
           GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
           GOOGLE_CREDENTIALS_JSON: ${{ secrets.GOOGLE_CREDENTIALS_JSON }}
+          # AI Analysis
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           python runner.py
       
