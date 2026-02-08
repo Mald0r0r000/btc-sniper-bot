@@ -408,6 +408,144 @@ class HyperliquidIntelligence:
             modifiers['confidence_boost'] += 5  # High volatility expected
         
         return modifiers
+    
+    # ==========================================
+    # GIST PERSISTENCE - Historical Tracking
+    # ==========================================
+    
+    GIST_FILENAME = "whale_intelligence_history.json"
+    MAX_HISTORY_ENTRIES = 288  # 24h at 5-min intervals
+    
+    def _load_history_from_gist(self) -> List[Dict]:
+        """Load historical whale data from Gist"""
+        if not self.gist_token or not self.gist_id:
+            return []
+        
+        try:
+            url = f"https://api.github.com/gists/{self.gist_id}"
+            req = urllib.request.Request(
+                url,
+                headers={
+                    'Authorization': f'token {self.gist_token}',
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            )
+            with urllib.request.urlopen(req, timeout=10) as response:
+                gist_data = json.loads(response.read().decode('utf-8'))
+                
+            files = gist_data.get('files', {})
+            if self.GIST_FILENAME in files:
+                content = files[self.GIST_FILENAME].get('content', '[]')
+                return json.loads(content)
+        except Exception as e:
+            print(f"⚠️ Failed to load whale history from Gist: {e}")
+        
+        return []
+    
+    def _save_history_to_gist(self, history: List[Dict]) -> bool:
+        """Save whale history to Gist"""
+        if not self.gist_token or not self.gist_id:
+            return False
+        
+        try:
+            url = f"https://api.github.com/gists/{self.gist_id}"
+            payload = {
+                'files': {
+                    self.GIST_FILENAME: {
+                        'content': json.dumps(history, indent=2, default=str)
+                    }
+                }
+            }
+            
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode('utf-8'),
+                headers={
+                    'Authorization': f'token {self.gist_token}',
+                    'Accept': 'application/vnd.github.v3+json',
+                    'Content-Type': 'application/json'
+                },
+                method='PATCH'
+            )
+            with urllib.request.urlopen(req, timeout=10) as response:
+                return response.status == 200
+        except Exception as e:
+            print(f"⚠️ Failed to save whale history to Gist: {e}")
+        
+        return False
+    
+    def save_snapshot(self, report: Dict) -> bool:
+        """
+        Save current intelligence report to history.
+        Maintains rolling 24h window of data.
+        """
+        history = self._load_history_from_gist()
+        
+        # Create snapshot entry
+        snapshot = {
+            'timestamp': report.get('timestamp'),
+            'btc_price': report.get('btc_price'),
+            'whale_count': report.get('smart_money', {}).get('whale_count', 0),
+            'sentiment': report.get('smart_money', {}).get('sentiment'),
+            'long_ratio': report.get('smart_money', {}).get('long_ratio_pct'),
+            'total_long': report.get('smart_money', {}).get('total_long'),
+            'total_short': report.get('smart_money', {}).get('total_short'),
+            'positions_at_risk': report.get('liquidation_risk', {}).get('positions_at_risk', 0),
+            'score_adjustment': report.get('signal_modifiers', {}).get('score_adjustment', 0)
+        }
+        
+        # Append and trim to max size
+        history.append(snapshot)
+        if len(history) > self.MAX_HISTORY_ENTRIES:
+            history = history[-self.MAX_HISTORY_ENTRIES:]
+        
+        return self._save_history_to_gist(history)
+    
+    def get_sentiment_trend(self, lookback_hours: int = 4) -> Dict[str, Any]:
+        """
+        Analyze sentiment changes over time.
+        Returns trend direction and magnitude.
+        """
+        history = self._load_history_from_gist()
+        
+        if len(history) < 2:
+            return {
+                'trend': 'UNKNOWN',
+                'change_pct': 0.0,
+                'entries': 0
+            }
+        
+        # Calculate entries for lookback period (5-min intervals)
+        entries_needed = min(len(history), lookback_hours * 12)
+        recent = history[-entries_needed:]
+        
+        if not recent:
+            return {'trend': 'UNKNOWN', 'change_pct': 0.0, 'entries': 0}
+        
+        # Compare first and last long_ratio
+        first_ratio = recent[0].get('long_ratio', 50)
+        last_ratio = recent[-1].get('long_ratio', 50)
+        change = last_ratio - first_ratio
+        
+        # Determine trend
+        if change > 10:
+            trend = 'TURNING_BULLISH'
+        elif change > 5:
+            trend = 'SLIGHTLY_BULLISH'
+        elif change < -10:
+            trend = 'TURNING_BEARISH'
+        elif change < -5:
+            trend = 'SLIGHTLY_BEARISH'
+        else:
+            trend = 'STABLE'
+        
+        return {
+            'trend': trend,
+            'change_pct': round(change, 1),
+            'entries': len(recent),
+            'first_ratio': first_ratio,
+            'last_ratio': last_ratio
+        }
 
 
 # Standalone test
@@ -415,3 +553,14 @@ if __name__ == "__main__":
     intel = HyperliquidIntelligence()
     report = intel.get_full_intelligence_report("BTC")
     print(json.dumps(report, indent=2, default=str))
+    
+    # Test snapshot save (requires GIST_TOKEN and GIST_ID)
+    if intel.gist_token and intel.gist_id:
+        print("\n📦 Saving snapshot to Gist...")
+        if intel.save_snapshot(report):
+            print("✅ Snapshot saved!")
+            
+            # Test trend analysis
+            trend = intel.get_sentiment_trend(lookback_hours=4)
+            print(f"\n📈 Sentiment Trend: {trend}")
+

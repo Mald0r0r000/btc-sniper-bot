@@ -346,6 +346,14 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
                       f"At Risk: {liq_risk.get('positions_at_risk', 0)} pos")
                 if modifiers.get('veto_long') or modifiers.get('veto_short'):
                     print(f"   ⚠️ Whale Veto: {modifiers.get('veto_reason', 'N/A')}")
+                
+                # Save snapshot to Gist for historical tracking
+                if intel.save_snapshot(hyperliquid_intelligence):
+                    # Get sentiment trend from history
+                    trend = intel.get_sentiment_trend(lookback_hours=4)
+                    hyperliquid_intelligence['sentiment_trend'] = trend
+                    if trend.get('trend') != 'UNKNOWN' and trend.get('trend') != 'STABLE':
+                        print(f"   📈 Trend: {trend.get('trend')} ({trend.get('change_pct'):+.1f}% over {trend.get('entries')} samples)")
             except Exception as e:
                 print(f"   ⚠️ Whale Intelligence failed: {e}")
         except Exception as e:
