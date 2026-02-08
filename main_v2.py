@@ -32,6 +32,7 @@ from analyzers import (
     MACDAnalyzer,
     SpotPerpDivergenceAnalyzer # Added SpotPerpDivergenceAnalyzer
 )
+from analyzers.hyperliquid_intelligence import HyperliquidIntelligence
 from decision_engine_v2 import DecisionEngineV2
 from consistency_checker import ConsistencyChecker
 
@@ -325,12 +326,28 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         
         # Hyperliquid Advanced Analysis (R&D)
         hyperliquid_result = {}
+        hyperliquid_intelligence = {}  # New: Whale position + liquidation tracking
         try:
             hl_analyzer = HyperliquidAnalyzer()
             hyperliquid_result = hl_analyzer.analyze()
             market = hyperliquid_result.get('market', {})
             whale = hyperliquid_result.get('whale_analysis', {})
             print(f"   🔷 Hyperliquid: OI {market.get('open_interest_btc', 0):,.0f} BTC | Whales {whale.get('sentiment', 'NEUTRAL')}")
+            
+            # NEW: Enhanced whale intelligence with liquidation tracking
+            try:
+                intel = HyperliquidIntelligence()
+                hyperliquid_intelligence = intel.get_full_intelligence_report("BTC")
+                smart_money = hyperliquid_intelligence.get('smart_money', {})
+                liq_risk = hyperliquid_intelligence.get('liquidation_risk', {})
+                modifiers = hyperliquid_intelligence.get('signal_modifiers', {})
+                print(f"   🐋 Whale Intel: {smart_money.get('whale_count', 0)} whales | "
+                      f"Sentiment: {smart_money.get('sentiment', 'UNKNOWN')} | "
+                      f"At Risk: {liq_risk.get('positions_at_risk', 0)} pos")
+                if modifiers.get('veto_long') or modifiers.get('veto_short'):
+                    print(f"   ⚠️ Whale Veto: {modifiers.get('veto_reason', 'N/A')}")
+            except Exception as e:
+                print(f"   ⚠️ Whale Intelligence failed: {e}")
         except Exception as e:
             print(f"   ⚠️ Hyperliquid analysis failed: {e}")
 
@@ -566,7 +583,7 @@ def run_analysis_v2(mode: str = 'full') -> Dict[str, Any]:
         candles_4h=candles_4h,  # Pour Fractal Targets MTF
         venturi_data=venturi_result,  # Fluid dynamics - Venturi
         self_trading_data=self_trading_result,  # Fluid dynamics - Self-Trading
-        hyperliquid_data=hyperliquid_result,  # Whale tracking sentiment
+        hyperliquid_data={**hyperliquid_result, **hyperliquid_intelligence},  # Whale tracking + liquidation intel
         macd_data=macd_result,  # MACD 3D for HTF trend confirmation
         squeeze_data=squeeze_result,  # NEW R&D Squeeze metric
         spot_perp_data=spot_perp_results # NEW Spot/Perp Divergence
