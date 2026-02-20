@@ -742,7 +742,7 @@ class DecisionEngineV2:
                     }
                 },
                 "structure": {
-                     "fvg_proximity": self.fvg.get('nearest_bull', {}).get('distance_pct') or self.fvg.get('nearest_bear', {}).get('distance_pct'),
+                     "fvg_proximity": (self.fvg.get('nearest_bull') or {}).get('distance_pct') or (self.fvg.get('nearest_bear') or {}).get('distance_pct'),
                      "order_book_imbalance": self.ob.get('imbalance_ratio', 1.0)
                 },
                 "institutional": {
